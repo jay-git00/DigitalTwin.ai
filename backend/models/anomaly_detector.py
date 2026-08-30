@@ -114,8 +114,8 @@ class AnomalyDetector:
                 contributing_features={},
             )
 
-        row_vals = np.array([[float(latest_dict.get(f, 0.0) or 0.0) for f in available_features]], dtype=np.float32)
-        X_scaled = scaler.transform(row_vals)
+        row_df = pd.DataFrame([latest_dict])[available_features]
+        X_scaled = scaler.transform(row_df)
 
         # decision_function: negative = anomaly, positive = normal
         raw_score = float(model.decision_function(X_scaled)[0])
