@@ -182,7 +182,7 @@ Each prevented scrap vehicle saves ~180 kg steel, 12L paint solvent, and ~333 kg
 ---
 
 ## 👥 Team
-- Dileep Kumar
+- Jayanth
 - Jay
 
 ---
