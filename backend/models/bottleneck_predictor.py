@@ -80,8 +80,8 @@ class BottleneckPredictor:
         pivot = (
             df.pivot_table(index="vehicle_id", columns="station_id", values="cycle_time_s")
             .sort_index()
-            .fillna(method="ffill")
-            .fillna(method="bfill")
+            .ffill()
+            .bfill()
         )
         # Ensure all 45 stations are present
         for sid in range(1, N_STATIONS + 1):
@@ -144,8 +144,8 @@ class BottleneckPredictor:
         pivot = (
             recent_df.pivot_table(index="vehicle_id", columns="station_id", values="cycle_time_s")
             .sort_index()
-            .fillna(method="ffill")
-            .fillna(method="bfill")
+            .ffill()
+            .bfill()
         )
         for sid in range(1, N_STATIONS + 1):
             if sid not in pivot.columns:

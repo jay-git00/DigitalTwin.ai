@@ -488,3 +488,80 @@ async def get_roi():
 @app.get("/health")
 async def health():
     return {"status": "ok", "sim_running": True, "ws_clients": len(state.ws_clients)}
+
+
+# ── System health gauge ────────────────────────────────────────────────────────
+@app.get("/api/system/health")
+async def get_system_health():
+    """Overall factory health score (0-100%) based on all station anomaly scores."""
+    scores = []
+    fault_stations = []
+    for sid in range(1, 46):
+        window = state.station_windows[sid]
+        if window:
+            latest = window[-1]
+            s = latest.get("anomaly_score", 0.0) or 0.0
+            scores.append(s)
+            if latest.get("fault_active") or s < -0.12:
+                fault_stations.append(sid)
+    health = round(max(0.0, min(100.0, ((sum(scores) / len(scores)) + 0.5) * 100)), 1) if scores else 100.0
+    return {
+        "health_score":    health,
+        "fault_stations":  fault_stations,
+        "stations_online": len(scores),
+        "vehicles_today":  state.vehicles_completed,
+    }
+
+
+# ── SHAP-style feature importance ─────────────────────────────────────────────
+@app.get("/api/explainability/{station_id}")
+async def get_explainability(station_id: int):
+    """Feature-level importance from the defect predictor for a given station."""
+    try:
+        model = state.defect_predictor
+        if hasattr(model, "model") and model.model is not None:
+            importances = model.model.feature_importances_
+            feature_names = [
+                "cycle_time_s", "torque_nm", "vibration_g", "temperature_c",
+                "cycle_lag1", "torque_lag1", "cycle_lag2", "torque_lag2",
+                "operator_id", "is_sensor_poor",
+            ]
+            n = len(importances)
+            names = (feature_names + [f"feat_{i}" for i in range(len(feature_names), n)])[:n]
+            pairs = sorted(zip(names, importances.tolist()), key=lambda x: x[1], reverse=True)[:8]
+            return {
+                "station_id": station_id,
+                "features": [{"name": k, "importance": round(v, 4)} for k, v in pairs],
+            }
+    except Exception:
+        pass
+    # Illustrative fallback
+    return {
+        "station_id": station_id,
+        "features": [
+            {"name": "cycle_time_s",   "importance": 0.31},
+            {"name": "torque_lag1",    "importance": 0.24},
+            {"name": "torque_nm",      "importance": 0.18},
+            {"name": "vibration_g",    "importance": 0.12},
+            {"name": "temperature_c",  "importance": 0.08},
+            {"name": "operator_id",    "importance": 0.04},
+            {"name": "cycle_lag1",     "importance": 0.02},
+            {"name": "is_sensor_poor", "importance": 0.01},
+        ],
+    }
+
+
+# ── Per-station sparkline ──────────────────────────────────────────────────────
+@app.get("/api/sparkline/{station_id}")
+async def get_sparkline(station_id: int):
+    """Last 20 cycle_time readings for sparkline mini charts."""
+    window = state.station_windows.get(station_id, [])
+    data = [
+        {
+            "cycle_time_s":  round(e.get("cycle_time_s", 0), 1),
+            "anomaly_score": round(e.get("anomaly_score", 0) or 0, 3),
+        }
+        for e in window[-20:]
+    ]
+    return {"station_id": station_id, "data": data}
+

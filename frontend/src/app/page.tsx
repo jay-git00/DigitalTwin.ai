@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Activity, Bell, Zap } from "lucide-react";
 import { StationStatus, Alert, WSMessage } from "@/types";
@@ -8,14 +8,18 @@ import { fetchJSON, API_BASE } from "@/lib/utils";
 import FactoryFloorMap from "@/components/FactoryFloorMap";
 import AlertPanel from "@/components/AlertPanel";
 import DemoControls from "@/components/DemoControls";
+import HealthGauge from "@/components/HealthGauge";
+import ROITicker from "@/components/ROITicker";
 
 export default function LiveFloorPage() {
-  const [stations, setStations] = useState<Record<number, StationStatus>>({});
-  const [alerts,   setAlerts]   = useState<Alert[]>([]);
-  const [vehicles, setVehicles] = useState(0);
-  const [wsConnected, setWsConnected] = useState(false);
+  const [stations,        setStations]        = useState<Record<number, StationStatus>>({});
+  const [alerts,          setAlerts]          = useState<Alert[]>([]);
+  const [vehicles,        setVehicles]        = useState(0);
+  const [wsConnected,     setWsConnected]     = useState(false);
+  const [cycleHistories,  setCycleHistories]  = useState<Record<number, number[]>>({});
+  const [interventionCount, setInterventionCount] = useState(0);
 
-  // Seed with HTTP poll on load, then WebSocket takes over
+  // Seed with HTTP poll on load
   useEffect(() => {
     fetchJSON<{ stations: StationStatus[] }>("/api/stations/status")
       .then(({ stations: s }) => {
@@ -23,42 +27,44 @@ export default function LiveFloorPage() {
         s.forEach((st) => { map[st.station_id] = st; });
         setStations(map);
       })
-      .catch(() => {/* backend not up yet */});
+      .catch(() => {});
 
     fetchJSON<{ alerts: Alert[] }>("/api/alerts")
       .then(({ alerts: a }) => setAlerts(a))
       .catch(() => {});
   }, []);
 
-  const activeSessionRef = useRef<number>(1);
+  // Update cycle history buffer when station data arrives
+  const updateHistory = useCallback((station: StationStatus) => {
+    setCycleHistories((prev) => {
+      const existing = prev[station.station_id] ?? [];
+      const updated  = [...existing, station.cycle_time_s].slice(-20);
+      return { ...prev, [station.station_id]: updated };
+    });
+  }, []);
 
   const handleWS = useCallback((msg: WSMessage) => {
     setWsConnected(true);
     if (msg.type === "init") {
       setAlerts(msg.alerts);
     } else if (msg.type === "station_update") {
-      if (msg.data.sim_session_id != null && msg.data.sim_session_id !== activeSessionRef.current) {
-        return; // Discard stale telemetry from previous simulation session
-      }
       setStations((prev) => ({ ...prev, [msg.data.station_id]: msg.data }));
-      if (msg.data.vehicles_completed != null) {
-        setVehicles(msg.data.vehicles_completed);
-      }
+      updateHistory(msg.data);
+      if (msg.data.station_id === 45) setVehicles((v) => v + 1);
     } else if (msg.type === "alert") {
       setAlerts((prev) => [...prev.filter(a => a.id !== msg.alert.id), msg.alert]);
     } else if (msg.type === "alert_resolved") {
       setAlerts((prev) =>
         prev.map((a) => a.id === msg.alert_id ? { ...a, status: "approved" } : a)
       );
+      setInterventionCount((n) => n + 1);
     } else if (msg.type === "reset") {
-      if (msg.sim_session_id != null) {
-        activeSessionRef.current = msg.sim_session_id;
-      }
-      setStations({});
       setAlerts([]);
       setVehicles(0);
+      setCycleHistories({});
+      setInterventionCount(0);
     }
-  }, []);
+  }, [updateHistory]);
 
   useWebSocket(handleWS);
 
@@ -68,7 +74,7 @@ export default function LiveFloorPage() {
   return (
     <div className="flex flex-col min-h-screen p-6 gap-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: "var(--text)" }}>
             Live Factory Floor
@@ -78,27 +84,19 @@ export default function LiveFloorPage() {
           </p>
         </div>
 
-        {/* KPI summary bar */}
-        <div className="flex items-center gap-4">
+        {/* KPI bar */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Health gauge */}
+          <HealthGauge />
+
+          {/* ROI ticker */}
+          <ROITicker interventionsApproved={interventionCount} />
+
+          {/* Standard KPIs */}
           {[
-            {
-              icon: Activity,
-              label: "Vehicles Today",
-              value: vehicles.toLocaleString(),
-              color: "var(--accent)",
-            },
-            {
-              icon: Zap,
-              label: "Anomalies",
-              value: anomalyCount,
-              color: anomalyCount > 0 ? "var(--danger)" : "var(--success)",
-            },
-            {
-              icon: Bell,
-              label: "Active Alerts",
-              value: activeAlerts.length,
-              color: activeAlerts.length > 0 ? "var(--danger)" : "var(--success)",
-            },
+            { icon: Activity, label: "Vehicles Today", value: vehicles.toLocaleString(),  color: "var(--accent)" },
+            { icon: Zap,      label: "Anomalies",       value: anomalyCount,               color: anomalyCount > 0 ? "var(--danger)" : "var(--success)" },
+            { icon: Bell,     label: "Active Alerts",   value: activeAlerts.length,        color: activeAlerts.length > 0 ? "var(--danger)" : "var(--success)" },
           ].map(({ icon: Icon, label, value, color }) => (
             <div
               key={label}
@@ -117,8 +115,10 @@ export default function LiveFloorPage() {
           <div className="flex items-center gap-2 text-xs"
                style={{ color: wsConnected ? "var(--success)" : "var(--warning)" }}>
             <span className="relative flex h-2 w-2">
-              <span className={`${wsConnected ? "animate-ping" : ""} absolute inline-flex h-full w-full rounded-full opacity-75`}
-                    style={{ background: wsConnected ? "var(--success)" : "var(--warning)" }} />
+              <span
+                className={`${wsConnected ? "animate-ping" : ""} absolute inline-flex h-full w-full rounded-full opacity-75`}
+                style={{ background: wsConnected ? "var(--success)" : "var(--warning)" }}
+              />
               <span className="relative inline-flex rounded-full h-2 w-2"
                     style={{ background: wsConnected ? "var(--success)" : "var(--warning)" }} />
             </span>
@@ -128,12 +128,12 @@ export default function LiveFloorPage() {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-6 text-xs" style={{ color: "var(--muted)" }}>
+      <div className="flex items-center gap-6 text-xs flex-wrap" style={{ color: "var(--muted)" }}>
         {[
-          { color: "#10b981", label: "Normal" },
-          { color: "#f59e0b", label: "Watch (borderline)" },
-          { color: "#ef4444", label: "Anomaly / Fault" },
-          { color: "var(--muted)", opacity: 0.6, label: "· Sensor-poor (GP imputed)" },
+          { color: "#10b981",        label: "Normal" },
+          { color: "#f59e0b",        label: "Watch — click WHY? on station" },
+          { color: "#ef4444",        label: "Anomaly / Fault — click WHY? to explain" },
+          { color: "var(--muted)",   label: "· Sensor-poor (GP imputed)", opacity: 0.6 },
         ].map(({ color, label, opacity }) => (
           <div key={label} className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full" style={{ background: color, opacity }} />
@@ -142,25 +142,19 @@ export default function LiveFloorPage() {
         ))}
       </div>
 
-      {/* Main content — 2 columns */}
+      {/* Main — factory map + alert panel */}
       <div className="flex gap-6 flex-1">
-        {/* Factory map — left 70% */}
         <div className="flex-1 min-w-0">
-          <FactoryFloorMap stations={stations} />
+          <FactoryFloorMap stations={stations} cycleHistories={cycleHistories} />
         </div>
 
-        {/* Alert panel — right 30% */}
         <div className="w-80 shrink-0 flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <Bell size={14} color="var(--danger)" />
-            <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-              Active Alerts
-            </h2>
+            <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Active Alerts</h2>
             {activeAlerts.length > 0 && (
-              <span
-                className="text-xs px-2 py-0.5 rounded-full font-bold"
-                style={{ background: "var(--danger)", color: "#fff" }}
-              >
+              <span className="text-xs px-2 py-0.5 rounded-full font-bold"
+                    style={{ background: "var(--danger)", color: "#fff" }}>
                 {activeAlerts.length}
               </span>
             )}
