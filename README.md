@@ -1,192 +1,174 @@
-<div align="center">
+# AI AssemblyTwin
 
-#  AI AssemblyTwin
+Live digital twin and predictive analytics platform for a vehicle assembly line. Built for the Accenture Innovation Challenge 2026 (Problem Statement: DigitalTwin.ai).
 
-### *Real-time AI-powered Digital Twin for Vehicle Assembly*
+## Project Overview
 
-**Accenture Innovation Challenge 2026 — Round 2 Submission**
+AI AssemblyTwin simulates a 45-station vehicle assembly line using SimPy discrete-event simulation and streams telemetry in real time to a Next.js web application. Machine learning models run against the live telemetry stream to detect cycle-time anomalies, forecast bottlenecks before line stoppage occurs, impute missing sensor metrics on legacy stations, and trace quality defects back to their upstream origins.
 
-[![Next.js](https://img.shields.io/badge/Frontend-Next.js%2014-black?logo=next.js)](https://nextjs.org)
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)](https://fastapi.tiangolo.com)
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
-
-</div>
-
----
-
-##  What It Does
-
-AI AssemblyTwin is a **live, full-stack Digital Twin** of a 45-station vehicle assembly line. It doesn't replay recorded data — it runs a real SimPy simulation, streams telemetry via WebSocket, and runs four ML models in real-time to:
-
--  **Detect anomalies** (Isolation Forest) before they become defects
--  **Predict bottlenecks** (PyTorch LSTM) from cycle-time trends
--  **Trace defect propagation** (Random Forest) from origin station to QC
--  **Impute missing sensor data** (Gaussian Process) for legacy stations with uncertainty bounds
+The application includes five dedicated pages for different operational roles:
+- **Live Floor (`/`)**: Interactive 45-station map, real-time KPI metrics, active alerts, and virtual intervention simulator.
+- **Analytics (`/analytics`)**: Multi-stakeholder dashboards covering shift throughput, plant manager maintenance recommendations, leadership ROI calculator, and ESG metrics.
+- **Defect Trace (`/defect-trace`)**: Upstream root-cause analysis showing how parameter variations propagate downstream to QC stations.
+- **Predictive Maintenance (`/maintenance`)**: Maintenance calendar and priority schedule based on model risk scores.
+- **Multi-Site (`/multisite`)**: Multi-factory overview dashboard comparing performance across different manufacturing sites.
 
 ---
 
-##  Quick Start
+## Architecture & System Design
 
-> **Requirements:** Python 3.11+ · Node.js 20+
-
-### Option A — One-click (Windows)
-```bash
-run.bat
+```
+                               ┌────────────────────────────────────────┐
+                               │       SimPy Discrete-Event Engine      │
+                               │   (45 Stations, Simulated Telemetry)   │
+                               └───────────────────┬────────────────────┘
+                                                   │ Real-time Events
+                                                   ▼
+ ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │                                       FastAPI Backend                                           │
+ │                                                                                                 │
+ │  ┌───────────────────────┐   ┌────────────────────────┐   ┌──────────────────────────────────┐  │
+ │  │ Gaussian Process (GPR) │   │ Isolation Forest (iForest) │   │  NumPy LSTM & Random Forest      │  │
+ │  │ Sensor Imputation      │   │ Anomaly Detection      │   │  Bottleneck & Defect Prediction  │  │
+ │  └───────────────────────┘   └────────────────────────┘   └──────────────────────────────────┘  │
+ └─────────────────────────────────────────┬───────────────────────────────────────────────────────┘
+                                           │ WebSockets (/ws/live) & REST API
+                                           ▼
+ ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │                                Next.js Frontend Dashboard                                       │
+ │                                                                                                 │
+ │  ┌───────────────────────┐   ┌────────────────────────┐   ┌──────────────────────────────────┐  │
+ │  │  Live Floor Map UI    │   │   Analytics Dashboard  │   │   Upstream Defect Trace Graph    │  │
+ │  └───────────────────────┘   └────────────────────────┘   └──────────────────────────────────┘  │
+ └─────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Option B — Manual
+### Machine Learning Models
 
-**Terminal 1 — Backend**
+1. **Gaussian Process Sensor Imputation (GPR)**
+   - Imputes missing torque, vibration, and temperature metrics for legacy stations without physical sensors using surrounding telemetry.
+   - Provides explicit confidence intervals ($\sigma$ uncertainty bounds) displayed in the UI.
+
+2. **Unsupervised Anomaly Detection (Isolation Forest)**
+   - Evaluates rolling 10-cycle telemetry buffers across all 45 stations to flag cycle-time drift and vibration anomalies.
+
+3. **Temporal Bottleneck Prediction (NumPy LSTM)**
+   - Evaluates multi-station cycle-time trends over time to forecast impending bottleneck formation 15–30 minutes before blockage.
+   - Uses exported model weights executed via pure NumPy matrix operations to run lightweight inference without heavy GPU runtime overhead.
+
+4. **Multi-Causal Defect Trace (Random Forest)**
+   - Analyzes station feature correlations to identify upstream root causes (e.g., Station 7 torque variation) that result in Station 44 quality failures.
+
+---
+
+## Model Artifacts
+
+Pre-trained model artifacts are stored in `backend/models/artifacts/` (~67 MB total):
+
+| Artifact | File Size | Description |
+|---|---|---|
+| `anomaly_models.pkl` | ~43.25 MB | Trained Isolation Forest models |
+| `sensor_imputer.pkl` | ~15.71 MB | Trained Gaussian Process scalers & estimators |
+| `defect_predictor.pkl` | ~7.15 MB | Trained Random Forest defect classifier |
+| `bottleneck_lstm_weights.npz` | ~0.91 MB | Exported NumPy LSTM weights for lightweight inference |
+| `anomaly_scalers.pkl` | ~0.02 MB | Feature scaling parameters |
+| `bottleneck_scaler.pkl` | < 0.01 MB | Sequence scaling parameters |
+
+---
+
+## Local Setup & Execution
+
+### Prerequisites
+- **Python**: 3.10+ (3.11 recommended)
+- **Node.js**: 18+ (20+ recommended)
+
+### 1. Backend Setup
+
 ```bash
 cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
+python -m venv venv
 
-**Terminal 2 — Frontend**
+# On Windows:
+venv\Scripts\activate
+# On Linux/macOS:
+source venv/bin/activate
+
+pip install -r requirements.txt
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+```
+The FastAPI server will start at `http://127.0.0.1:8000` and stream live simulation events via WebSockets.
+
+### 2. Frontend Setup
+
+In a second terminal:
+
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev -- -p 3000
 ```
-
-Open **[http://localhost:3000](http://localhost:3000)**
-
----
-
-##  Pages & Features
-
-| Page | What You See |
-|---|---|
-| **`/`** Live Floor | 45-station factory map · sparklines · health gauge · ₹ ROI ticker · Before/After toggle · WHY? explainability |
-| **`/alerts`** Alerts | Real-time alert feed · virtual intervention simulator · approve / dismiss |
-| **`/analytics`** Analytics | 4 views: Floor Supervisor · Plant Manager · Leadership · **ESG / Sustainability** |
-| **`/defect-trace`** Defect Trace | Causal defect chain from origin station → QC Gate |
-| **`/maintenance`** Maintenance | AI-predicted maintenance calendar · proactive vs reactive cost comparison |
-| **`/multisite`** Multi-Site | 3-plant enterprise overview (Chennai · Pune · Bangalore) |
+Open **[http://localhost:3000](http://localhost:3000)** in your browser.
 
 ---
 
-##  Architecture
+## Demo Instructions
+
+Use the **Demo Controls** panel at the bottom right of the Live Floor page to test scenarios:
+
+### 1. Bottleneck & Intervention Flow
+1. Open the **Live Floor** page.
+2. Click **Inject Bottleneck (Station 12)**.
+3. Watch Station 12's cycle time degrade from ~62s to >90s over 15–30 seconds.
+4. An active **Bottleneck Alert** card will populate in the Active Alerts panel.
+5. Click **Simulate →** on the alert card to open the Intervention Simulator.
+6. Test any of the 3 candidate interventions:
+   - **Add 1 Technician** (+73% recovery)
+   - **Reduce Feed Rate 15%** (+55% recovery)
+   - **Pause Upstream Buffer** (+100% recovery)
+7. Approve the intervention. Station 12 will recover to normal baseline (~59s/OK) and the alert will resolve.
+
+### 2. Defect Origin & Trace Flow
+1. Click **Inject Defect (Station 7)**.
+2. Navigate to the **Defect Trace** page (`/defect-trace`).
+3. Select Station 7 as the defect origin and load the vehicle profile.
+4. Review the risk propagation timeline showing how Station 7 torque offset propagates to Station 44 (QC).
+
+### 3. Simulation Reset
+1. Click **Reset Simulation**.
+2. Vehicles Today resets to 0, active alerts clear, and all 45 stations return to `IDLE / —` before starting a fresh run from Station 1.
+
+---
+
+## Deployment & Execution Notes
+
+- **Persistent WebSockets & Simulation Engine**: The FastAPI backend runs a continuous SimPy simulation thread and streams events over WebSockets (`/ws/live`). Deployments require a hosting environment that supports long-running Python background processes and persistent WebSockets rather than short-lived stateless functions.
+- **Lightweight LSTM Inference**: The bottleneck prediction model weights were serialized to NumPy (`bottleneck_lstm_weights.npz`) to allow zero-overhead inference without requiring PyTorch at runtime, reducing memory requirements for low-memory container tiers.
+
+---
+
+## Project Structure
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                    FRONTEND (Next.js 14)                │
-│  Live Floor · Alerts · Analytics · Maintenance · ...   │
-│  Framer Motion · Recharts · WebSocket client           │
-└─────────────────────┬──────────────────────────────────┘
-                      │ WebSocket + REST
-┌─────────────────────▼──────────────────────────────────┐
-│                   BACKEND (FastAPI)                     │
-│  /ws/live · /api/stations · /api/alerts · /api/esg     │
-│  /api/maintenance · /api/multisite · /api/causal       │
-└──────┬──────────┬──────────┬──────────┬────────────────┘
-       │          │          │          │
-  SimPy Sim  Isolation  LSTM LSTM   Random     Gaussian
-  (45 stn)   Forest    Bottleneck   Forest      Process
-             Anomaly   Predictor    Defect      Imputer
-             Detector               Predictor
+DigitalTwin.ai/
+├── PROPOSAL.md                  # Project proposal document
+├── README.md                    # System documentation
+├── backend/
+│   ├── main.py                  # FastAPI server, WebSocket handlers & API routes
+│   ├── requirements.txt         # Backend Python dependencies
+│   ├── data/                    # Data generation & training scripts
+│   ├── models/
+│   │   ├── anomaly_detector.py  # Isolation Forest implementation
+│   │   ├── bottleneck_predictor.py # NumPy LSTM prediction engine
+│   │   ├── defect_predictor.py  # Random Forest defect classifier
+│   │   ├── sensor_imputer.py    # Gaussian Process Regression implementation
+│   │   └── artifacts/           # Trained ML model weights (~67 MB)
+│   └── simulator/
+│       └── assembly_line.py     # SimPy 45-station discrete-event simulation engine
+└── frontend/
+    ├── package.json             # Next.js frontend dependencies
+    ├── src/
+    │   ├── app/                 # Next.js App Router pages
+    │   ├── components/          # React components
+    │   ├── lib/                 # Utilities & WebSocket hook
+    │   └── types/               # TypeScript type definitions
 ```
-
-### Tech Stack
-
-| Layer | Technology | Rationale |
-|---|---|---|
-| Simulation | `SimPy` | Python-native discrete-event, realistic cycle drift |
-| Realtime Pipeline | `FastAPI` + `WebSockets` | Async, sub-100ms inference streaming |
-| Frontend | `Next.js 14` + `Framer Motion` | Server components + fluid animations |
-| Anomaly Detection | `Isolation Forest` (scikit-learn) | Unsupervised — no labelled fault data needed |
-| Bottleneck Prediction | `PyTorch LSTM` | Captures non-linear temporal sequence drift |
-| Defect Causality | `Random Forest` + lag features | Upstream torque → downstream QC failure chain |
-| Sensor Imputation | `Gaussian Process` | Explicit uncertainty bounds for legacy stations |
-
----
-
-##  API Reference
-
-| Endpoint | Description |
-|---|---|
-| `WS /ws/live` | Real-time station telemetry stream |
-| `GET /api/stations/status` | All 45 station current state |
-| `GET /api/alerts` | Active + historical alerts |
-| `GET /api/system/health` | Factory health score (0–100%) |
-| `GET /api/explainability/{id}` | SHAP-style feature importance for a station |
-| `GET /api/sparkline/{id}` | Last 20 cycle-time readings |
-| `GET /api/maintenance/schedule` | AI-predicted maintenance actions + due dates |
-| `GET /api/multisite` | 3-plant enterprise network data |
-| `GET /api/esg` | CO₂, steel, energy saved — ESG metrics |
-| `GET /api/causal/chain/{id}` | Defect propagation chain from origin → QC |
-| `GET /api/roi` | ROI stats (defect cost avoided, throughput recovered) |
-| `POST /api/demo/inject_fault` | Trigger demo scenario (bottleneck / defect) |
-| `POST /api/demo/reset` | Clean simulation restart |
-
----
-
-## ML Models
-
-All models are pre-trained and loaded at startup from `backend/models/artifacts/`.
-
-| Model | Algorithm | Input Features | Output |
-|---|---|---|---|
-| `AnomalyDetector` | Isolation Forest | cycle_time, torque, vibration, temp | anomaly_score ∈ [-1, 1] |
-| `BottleneckPredictor` | LSTM (2-layer) | 10-step cycle-time windows | bottleneck_prob ∈ [0, 1] |
-| `DefectPredictor` | Random Forest | cycle/torque + 2 lag features | defect_risk ∈ [0, 1] |
-| `SensorImputer` | Gaussian Process | neighbour station readings | imputed_value + σ (uncertainty) |
-
----
-
-## Demo Walkthrough
-
-### 1 — Before / After Toggle
-On the Live Floor (`/`), toggle **"Digital Twin: OFF"**. The banner shows what would happen without the twin: 12 vehicles passed QC with defects, ₹48L rework cost. Toggle it back **ON** to show what the twin actually prevented.
-
-### 2 — Inject a Fault
-Use the **Demo Controls** panel (bottom-right):
-- **Bottleneck** at Station 12 → watch the station turn amber → LSTM alert fires → click **WHY?** to see SHAP feature importance.
-- **Defect** at Station 7 → navigate to `/defect-trace` → watch the risk propagate through 37 downstream stations to QC Gate.
-
-### 3 — Maintenance Calendar
-Go to `/maintenance`. The AI has predicted which stations will need intervention in the next 30 days based on cycle-time drift. The banner shows: **proactive maintenance costs ₹X. Waiting until failure costs 8.3× more.**
-
-### 4 — Multi-Site Scale
-Go to `/multisite`. Three plants — Chennai (live), Pune (monitoring), Bangalore (optimal) — all running on the same AI backbone. This proves the solution is enterprise-ready, not a prototype.
-
-### 5 — ESG Tab
-Go to `/analytics` → **ESG / Sustainability**. Every prevented scrap vehicle = CO₂ saved, steel waste avoided, paint waste reduced. Aligned to **SDG 9, 12, and 13** — directly matching Accenture's Net Zero 2025 commitment.
-
----
-
-##  ESG Alignment
-
-AI AssemblyTwin directly contributes to Accenture's sustainability commitments:
-
-- **SDG 9** — Industry, Innovation & Infrastructure
-- **SDG 12** — Responsible Consumption & Production
-- **SDG 13** — Climate Action
-
-Each prevented scrap vehicle saves ~180 kg steel, 12L paint solvent, and ~333 kg CO₂.
-
----
-
-##  ROI Model
-
-| Metric | Value |
-|---|---|
-| Deployment cost | ₹45 L |
-| Monthly savings (defect prevention + throughput) | ₹18 L |
-| Payback period | ~2.5 months |
-| 3-year projected savings | ₹6.1 Cr |
-| Emergency repair multiplier (reactive vs proactive) | 8.3× |
-
----
-
-##  Team
-- Jayanth
-- Sagar
-- Abhinav
-
----
-
-##  License
-MIT — see [LICENSE](LICENSE)

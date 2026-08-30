@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Alert, WSMessage } from "@/types";
 import { useWebSocket } from "@/lib/useWebSocket";
 import { fetchJSON } from "@/lib/utils";
@@ -11,7 +11,6 @@ import BeforeAfterToggle from "@/components/BeforeAfterToggle";
 import FactoryFloorMap from "@/components/FactoryFloorMap";
 import { StationStatus, WSMessage as WS } from "@/types";
 import { Activity, Bell, Zap } from "lucide-react";
-import { useEffect } from "react";
 
 export default function LiveFloorPage() {
   const [stations,         setStations]         = useState<Record<number, StationStatus>>({});
@@ -21,12 +20,17 @@ export default function LiveFloorPage() {
   const [cycleHistories,   setCycleHistories]   = useState<Record<number, number[]>>({});
   const [interventionCount,setInterventionCount]= useState(0);
 
+  const activeSessionRef = useRef<number>(1);
+
   useEffect(() => {
-    fetchJSON<{ stations: StationStatus[] }>("/api/stations/status")
-      .then(({ stations: s }) => {
+    fetchJSON<{ stations: StationStatus[]; vehicles_completed?: number }>("/api/stations/status")
+      .then((data) => {
         const map: Record<number, StationStatus> = {};
-        s.forEach((st) => { map[st.station_id] = st; });
+        (data.stations || []).forEach((st) => { map[st.station_id] = st; });
         setStations(map);
+        if (data.vehicles_completed != null) {
+          setVehicles(data.vehicles_completed);
+        }
       }).catch(() => {});
     fetchJSON<{ alerts: Alert[] }>("/api/alerts")
       .then(({ alerts: a }) => setAlerts(a)).catch(() => {});
@@ -42,19 +46,31 @@ export default function LiveFloorPage() {
 
   const handleWS = useCallback((msg: WS) => {
     setWsConnected(true);
-    if      (msg.type === "init")           setAlerts(msg.alerts);
-    else if (msg.type === "station_update") {
+    if (msg.type === "init") {
+      setAlerts(msg.alerts);
+    } else if (msg.type === "station_update") {
+      if (msg.data.sim_session_id != null && msg.data.sim_session_id !== activeSessionRef.current) {
+        return; // Discard stale telemetry from previous simulation session
+      }
       setStations((prev) => ({ ...prev, [msg.data.station_id]: msg.data }));
       updateHistory(msg.data);
-      if (msg.data.station_id === 45) setVehicles((v) => v + 1);
-    }
-    else if (msg.type === "alert")          setAlerts((prev) => [...prev.filter(a => a.id !== msg.alert.id), msg.alert]);
-    else if (msg.type === "alert_resolved") {
+      if (msg.data.vehicles_completed != null) {
+        setVehicles(msg.data.vehicles_completed);
+      }
+    } else if (msg.type === "alert") {
+      setAlerts((prev) => [...prev.filter(a => a.id !== msg.alert.id), msg.alert]);
+    } else if (msg.type === "alert_resolved") {
       setAlerts((prev) => prev.map((a) => a.id === msg.alert_id ? { ...a, status: "approved" } : a));
       setInterventionCount((n) => n + 1);
-    }
-    else if (msg.type === "reset") {
-      setAlerts([]); setVehicles(0); setCycleHistories({}); setInterventionCount(0);
+    } else if (msg.type === "reset") {
+      if (msg.sim_session_id != null) {
+        activeSessionRef.current = msg.sim_session_id;
+      }
+      setStations({});
+      setAlerts([]);
+      setVehicles(0);
+      setCycleHistories({});
+      setInterventionCount(0);
     }
   }, [updateHistory]);
 
