@@ -13,7 +13,7 @@ import pandas as pd
 import joblib
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 ARTIFACT_DIR = Path(__file__).parent / "artifacts"
 N_STATIONS = 45
@@ -26,31 +26,47 @@ BOTTLENECK_THRESHOLD = 1.35  # cycle_time > 135% of station mean = bottleneck
 class BottleneckPrediction:
     station_id: int
     bottleneck_prob: float
-    eta_minutes: Optional[int]
+    eta_minutes: int
     confidence: float
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
-    return 1.0 / (1.0 + np.exp(-np.clip(x, -30, 30)))
+    return 1.0 / (1.0 + np.exp(-np.clip(x, -15.0, 15.0)))
 
 
-def _lstm_layer(x: np.ndarray, w_ih: np.ndarray, w_hh: np.ndarray, b_ih: np.ndarray, b_hh: np.ndarray) -> np.ndarray:
-    """Pure NumPy 1D/2D LSTM layer forward pass."""
-    seq_len, _ = x.shape
-    hidden_size = w_ih.shape[0] // 4
-    h = np.zeros(hidden_size, dtype=np.float32)
-    c = np.zeros(hidden_size, dtype=np.float32)
+def _lstm_step(
+    x: np.ndarray,
+    h_prev: np.ndarray,
+    c_prev: np.ndarray,
+    w_ih: np.ndarray,
+    w_hh: np.ndarray,
+    b_ih: np.ndarray,
+    b_hh: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    gates = (x @ w_ih.T + b_ih) + (h_prev @ w_hh.T + b_hh)
+    hidden_dim = h_prev.shape[-1]
+    i = _sigmoid(gates[:hidden_dim])
+    f = _sigmoid(gates[hidden_dim : 2 * hidden_dim])
+    g = np.tanh(gates[2 * hidden_dim : 3 * hidden_dim])
+    o = _sigmoid(gates[3 * hidden_dim :])
+    c = f * c_prev + i * g
+    h = o * np.tanh(c)
+    return h, c
 
+
+def _lstm_layer(
+    x_seq: np.ndarray,
+    w_ih: np.ndarray,
+    w_hh: np.ndarray,
+    b_ih: np.ndarray,
+    b_hh: np.ndarray,
+) -> np.ndarray:
+    hidden_dim = w_hh.shape[1]
+    h = np.zeros(hidden_dim, dtype=np.float32)
+    c = np.zeros(hidden_dim, dtype=np.float32)
     outputs = []
-    for t in range(seq_len):
-        gates = (x[t] @ w_ih.T + b_ih) + (h @ w_hh.T + b_hh)
-        i = _sigmoid(gates[0:hidden_size])
-        f = _sigmoid(gates[hidden_size:2*hidden_size])
-        g = np.tanh(gates[2*hidden_size:3*hidden_size])
-        o = _sigmoid(gates[3*hidden_size:4*hidden_size])
-
-        c = f * c + i * g
-        h = o * np.tanh(c)
+    for t in range(x_seq.shape[0]):
+        h, c = _lstm_step(x_seq[t], h, c, w_ih, w_hh, b_ih, b_hh)
         outputs.append(h)
     return np.array(outputs, dtype=np.float32)
 
@@ -86,25 +102,45 @@ class BottleneckPredictor:
 
         return self
 
-    def predict(self, recent_df: pd.DataFrame) -> list[BottleneckPrediction]:
+    def predict(self, recent_input: Union[pd.DataFrame, dict]) -> list[BottleneckPrediction]:
         if self.weights is None:
             self.load()
 
         if self.weights is None or self.station_means is None:
             return []
 
-        pivot = (
-            recent_df.pivot_table(index="vehicle_id", columns="station_id", values="cycle_time_s")
-            .sort_index()
-            .ffill()
-            .bfill()
-        )
-        for sid in range(1, N_STATIONS + 1):
-            if sid not in pivot.columns:
-                pivot[sid] = 0.0
-        pivot = pivot[[i for i in range(1, N_STATIONS + 1)]]
+        if isinstance(recent_input, dict):
+            # Fast path: dict of station_id -> list of event dicts
+            vals_rows = []
+            max_len = max((len(w) for w in recent_input.values()), default=0)
+            if max_len == 0:
+                return []
+            start_idx = max(0, max_len - SEQ_LEN)
+            for t in range(start_idx, max_len):
+                row = []
+                for sid in range(1, N_STATIONS + 1):
+                    win = recent_input.get(sid, [])
+                    if t < len(win):
+                        row.append(float(win[t].get("cycle_time_s", 60.0)))
+                    elif win:
+                        row.append(float(win[-1].get("cycle_time_s", 60.0)))
+                    else:
+                        row.append(60.0)
+                vals_rows.append(row)
+            vals = np.array(vals_rows, dtype=np.float32)
+        else:
+            pivot = (
+                recent_input.pivot_table(index="vehicle_id", columns="station_id", values="cycle_time_s")
+                .sort_index()
+                .ffill()
+                .bfill()
+            )
+            for sid in range(1, N_STATIONS + 1):
+                if sid not in pivot.columns:
+                    pivot[sid] = 0.0
+            pivot = pivot[[i for i in range(1, N_STATIONS + 1)]]
+            vals = pivot.values[-SEQ_LEN:].astype(np.float32)
 
-        vals = pivot.values[-SEQ_LEN:].astype(np.float32)
         if len(vals) < SEQ_LEN:
             pad = np.zeros((SEQ_LEN - len(vals), N_STATIONS), dtype=np.float32)
             vals = np.vstack([pad, vals])

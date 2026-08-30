@@ -54,6 +54,7 @@ class AppState:
     vehicles_completed: int
     sim_session_id: int
     roi_stats: dict
+    models_ready: bool = False
     loop: Optional[asyncio.AbstractEventLoop] = None
 
 state = AppState()
@@ -63,6 +64,7 @@ state.active_alerts     = {}
 state.alert_counter     = 0
 state.vehicles_completed = 0
 state.sim_session_id    = 1
+state.models_ready      = False
 state.roi_stats         = {
     "throughput_recovered_pct": 0.0,
     "defect_cost_avoided_inr":  0.0,
@@ -77,25 +79,11 @@ state.roi_stats         = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     state.loop = asyncio.get_running_loop()
-    print("[Startup] Loading ML models...")
-    ARTIFACTS = Path(__file__).parent / "models" / "artifacts"
     state.anomaly_detector    = AnomalyDetector()
     state.bottleneck_predictor = BottleneckPredictor()
     state.defect_predictor    = DefectPredictor()
     state.sensor_imputer      = SensorImputer()
-
-    if (ARTIFACTS / "anomaly_models.pkl").exists():
-        state.anomaly_detector.load()
-        print("  [OK] AnomalyDetector")
-    if (ARTIFACTS / "bottleneck_lstm.pt").exists():
-        state.bottleneck_predictor.load()
-        print("  [OK] BottleneckPredictor")
-    if (ARTIFACTS / "defect_predictor.pkl").exists():
-        state.defect_predictor.load()
-        print("  [OK] DefectPredictor")
-    if (ARTIFACTS / "sensor_imputer.pkl").exists():
-        state.sensor_imputer.load()
-        print("  [OK] SensorImputer")
+    state.models_ready        = False
 
     print("[Startup] Starting simulation...")
     state.sim = AssemblyLineSimulation(speed_multiplier=35.0)  # 5x real time for demo
@@ -106,6 +94,27 @@ async def lifespan(app: FastAPI):
 
     sim_thread = threading.Thread(target=run_sim, daemon=True)
     sim_thread.start()
+
+    # Async background task to load ML models without delaying port binding
+    async def load_models_bg():
+        print("[Startup] Loading ML models in background worker...")
+        ARTIFACTS = Path(__file__).parent / "models" / "artifacts"
+        if (ARTIFACTS / "anomaly_models.pkl").exists():
+            await asyncio.to_thread(state.anomaly_detector.load)
+            print("  [OK] AnomalyDetector")
+        if (ARTIFACTS / "bottleneck_lstm_weights.npz").exists() or (ARTIFACTS / "bottleneck_lstm.pt").exists():
+            await asyncio.to_thread(state.bottleneck_predictor.load)
+            print("  [OK] BottleneckPredictor")
+        if (ARTIFACTS / "defect_predictor.pkl").exists():
+            await asyncio.to_thread(state.defect_predictor.load)
+            print("  [OK] DefectPredictor")
+        if (ARTIFACTS / "sensor_imputer.pkl").exists():
+            await asyncio.to_thread(state.sensor_imputer.load)
+            print("  [OK] SensorImputer")
+        state.models_ready = True
+        print("[Startup] ML models fully loaded and ready!")
+
+    asyncio.create_task(load_models_bg())
 
     # Auto-play demo: inject bottleneck at station 12 after 3 min
     async def auto_demo():
@@ -147,7 +156,7 @@ async def process_event(event: dict) -> dict:
     sid = event["station_id"]
 
     # Sensor imputation for poor stations
-    if event.get("is_sensor_poor"):
+    if event.get("is_sensor_poor") and state.models_ready:
         neighbours_data = {}
         from simulator.assembly_line import NEIGHBOURS
         for n_sid in NEIGHBOURS.get(sid, []):
@@ -180,9 +189,8 @@ async def process_event(event: dict) -> dict:
     # Anomaly detection & Fault alerts
     if event.get("fault_active"):
         await maybe_raise_alert(event, {})
-    elif len(window) >= 3:
-        win_df = pd.DataFrame(window)
-        anom = state.anomaly_detector.predict(win_df, sid)
+    elif state.models_ready and len(window) >= 3:
+        anom = state.anomaly_detector.predict(window, sid)
         event["anomaly_score"] = anom.anomaly_score
         if anom.is_anomaly and anom.anomaly_score < -0.12:
             await maybe_raise_alert(event, anom.contributing_features)
@@ -205,12 +213,9 @@ async def maybe_raise_alert(event: dict, contributing_features: dict):
     eta_minutes = None
 
     # Check LSTM bottleneck predictor
-    recent_df = pd.DataFrame([
-        e for window in state.station_windows.values() for e in window
-    ])
-    if len(recent_df) >= 10:
+    if state.models_ready:
         try:
-            bp_preds = state.bottleneck_predictor.predict(recent_df)
+            bp_preds = state.bottleneck_predictor.predict(state.station_windows)
             bp_match = next((p for p in bp_preds if p.station_id == sid), None)
             if bp_match and bp_match.bottleneck_prob > 0.40:
                 confidence  = float(bp_match.confidence)
@@ -487,7 +492,7 @@ async def get_roi():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "sim_running": True, "ws_clients": len(state.ws_clients)}
+    return {"status": "ok", "sim_running": True, "models_ready": state.models_ready, "ws_clients": len(state.ws_clients)}
 
 
 # ── System health gauge ────────────────────────────────────────────────────────
