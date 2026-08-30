@@ -1,40 +1,37 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
-import { AnimatePresence } from "framer-motion";
-import { Activity, Bell, Zap } from "lucide-react";
-import { StationStatus, Alert, WSMessage } from "@/types";
+import { useState, useCallback } from "react";
+import { Alert, WSMessage } from "@/types";
 import { useWebSocket } from "@/lib/useWebSocket";
-import { fetchJSON, API_BASE } from "@/lib/utils";
-import FactoryFloorMap from "@/components/FactoryFloorMap";
+import { fetchJSON } from "@/lib/utils";
 import AlertPanel from "@/components/AlertPanel";
 import DemoControls from "@/components/DemoControls";
 import HealthGauge from "@/components/HealthGauge";
 import ROITicker from "@/components/ROITicker";
+import BeforeAfterToggle from "@/components/BeforeAfterToggle";
+import FactoryFloorMap from "@/components/FactoryFloorMap";
+import { StationStatus, WSMessage as WS } from "@/types";
+import { Activity, Bell, Zap } from "lucide-react";
+import { useEffect } from "react";
 
 export default function LiveFloorPage() {
-  const [stations,        setStations]        = useState<Record<number, StationStatus>>({});
-  const [alerts,          setAlerts]          = useState<Alert[]>([]);
-  const [vehicles,        setVehicles]        = useState(0);
-  const [wsConnected,     setWsConnected]     = useState(false);
-  const [cycleHistories,  setCycleHistories]  = useState<Record<number, number[]>>({});
-  const [interventionCount, setInterventionCount] = useState(0);
+  const [stations,         setStations]         = useState<Record<number, StationStatus>>({});
+  const [alerts,           setAlerts]           = useState<Alert[]>([]);
+  const [vehicles,         setVehicles]         = useState(0);
+  const [wsConnected,      setWsConnected]      = useState(false);
+  const [cycleHistories,   setCycleHistories]   = useState<Record<number, number[]>>({});
+  const [interventionCount,setInterventionCount]= useState(0);
 
-  // Seed with HTTP poll on load
   useEffect(() => {
     fetchJSON<{ stations: StationStatus[] }>("/api/stations/status")
       .then(({ stations: s }) => {
         const map: Record<number, StationStatus> = {};
         s.forEach((st) => { map[st.station_id] = st; });
         setStations(map);
-      })
-      .catch(() => {});
-
+      }).catch(() => {});
     fetchJSON<{ alerts: Alert[] }>("/api/alerts")
-      .then(({ alerts: a }) => setAlerts(a))
-      .catch(() => {});
+      .then(({ alerts: a }) => setAlerts(a)).catch(() => {});
   }, []);
 
-  // Update cycle history buffer when station data arrives
   const updateHistory = useCallback((station: StationStatus) => {
     setCycleHistories((prev) => {
       const existing = prev[station.station_id] ?? [];
@@ -43,26 +40,21 @@ export default function LiveFloorPage() {
     });
   }, []);
 
-  const handleWS = useCallback((msg: WSMessage) => {
+  const handleWS = useCallback((msg: WS) => {
     setWsConnected(true);
-    if (msg.type === "init") {
-      setAlerts(msg.alerts);
-    } else if (msg.type === "station_update") {
+    if      (msg.type === "init")           setAlerts(msg.alerts);
+    else if (msg.type === "station_update") {
       setStations((prev) => ({ ...prev, [msg.data.station_id]: msg.data }));
       updateHistory(msg.data);
       if (msg.data.station_id === 45) setVehicles((v) => v + 1);
-    } else if (msg.type === "alert") {
-      setAlerts((prev) => [...prev.filter(a => a.id !== msg.alert.id), msg.alert]);
-    } else if (msg.type === "alert_resolved") {
-      setAlerts((prev) =>
-        prev.map((a) => a.id === msg.alert_id ? { ...a, status: "approved" } : a)
-      );
+    }
+    else if (msg.type === "alert")          setAlerts((prev) => [...prev.filter(a => a.id !== msg.alert.id), msg.alert]);
+    else if (msg.type === "alert_resolved") {
+      setAlerts((prev) => prev.map((a) => a.id === msg.alert_id ? { ...a, status: "approved" } : a));
       setInterventionCount((n) => n + 1);
-    } else if (msg.type === "reset") {
-      setAlerts([]);
-      setVehicles(0);
-      setCycleHistories({});
-      setInterventionCount(0);
+    }
+    else if (msg.type === "reset") {
+      setAlerts([]); setVehicles(0); setCycleHistories({}); setInterventionCount(0);
     }
   }, [updateHistory]);
 
@@ -72,53 +64,37 @@ export default function LiveFloorPage() {
   const anomalyCount = Object.values(stations).filter((s) => (s.anomaly_score ?? 0) < -0.05).length;
 
   return (
-    <div className="flex flex-col min-h-screen p-6 gap-6">
-      {/* Page header */}
+    <div className="flex flex-col min-h-screen p-6 gap-5">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: "var(--text)" }}>
-            Live Factory Floor
-          </h1>
+          <h1 className="text-2xl font-bold" style={{ color: "var(--text)" }}>Live Factory Floor</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            45-station vehicle assembly line · Real-time digital twin
+            45-station vehicle assembly · Real-time digital twin · Chennai Plant
           </p>
         </div>
 
-        {/* KPI bar */}
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Health gauge */}
           <HealthGauge />
-
-          {/* ROI ticker */}
           <ROITicker interventionsApproved={interventionCount} />
-
-          {/* Standard KPIs */}
           {[
-            { icon: Activity, label: "Vehicles Today", value: vehicles.toLocaleString(),  color: "var(--accent)" },
-            { icon: Zap,      label: "Anomalies",       value: anomalyCount,               color: anomalyCount > 0 ? "var(--danger)" : "var(--success)" },
-            { icon: Bell,     label: "Active Alerts",   value: activeAlerts.length,        color: activeAlerts.length > 0 ? "var(--danger)" : "var(--success)" },
+            { icon: Activity, label: "Vehicles", value: vehicles.toLocaleString(),  color: "var(--accent)" },
+            { icon: Zap,      label: "Anomalies", value: anomalyCount,              color: anomalyCount > 0 ? "var(--danger)" : "var(--success)" },
+            { icon: Bell,     label: "Alerts",    value: activeAlerts.length,       color: activeAlerts.length > 0 ? "var(--danger)" : "var(--success)" },
           ].map(({ icon: Icon, label, value, color }) => (
-            <div
-              key={label}
-              className="flex flex-col items-center px-5 py-3 rounded-xl"
-              style={{ background: "var(--card)", border: "1px solid var(--border)" }}
-            >
-              <Icon size={14} color={color as string} />
-              <span className="text-xl font-bold mt-1" style={{ color: color as string }}>
-                {value}
-              </span>
+            <div key={label} className="flex flex-col items-center px-4 py-3 rounded-xl"
+                 style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+              <Icon size={13} color={color as string} />
+              <span className="text-xl font-bold mt-0.5" style={{ color: color as string }}>{value}</span>
               <span className="text-[10px]" style={{ color: "var(--muted)" }}>{label}</span>
             </div>
           ))}
-
-          {/* WS status */}
-          <div className="flex items-center gap-2 text-xs"
+          {/* WS indicator */}
+          <div className="flex items-center gap-1.5 text-xs"
                style={{ color: wsConnected ? "var(--success)" : "var(--warning)" }}>
             <span className="relative flex h-2 w-2">
-              <span
-                className={`${wsConnected ? "animate-ping" : ""} absolute inline-flex h-full w-full rounded-full opacity-75`}
-                style={{ background: wsConnected ? "var(--success)" : "var(--warning)" }}
-              />
+              <span className={`${wsConnected ? "animate-ping" : ""} absolute inline-flex h-full w-full rounded-full opacity-75`}
+                    style={{ background: wsConnected ? "var(--success)" : "var(--warning)" }} />
               <span className="relative inline-flex rounded-full h-2 w-2"
                     style={{ background: wsConnected ? "var(--success)" : "var(--warning)" }} />
             </span>
@@ -127,13 +103,16 @@ export default function LiveFloorPage() {
         </div>
       </div>
 
+      {/* Before/After toggle — THE killer demo moment */}
+      <BeforeAfterToggle interventionsApproved={interventionCount} />
+
       {/* Legend */}
-      <div className="flex items-center gap-6 text-xs flex-wrap" style={{ color: "var(--muted)" }}>
+      <div className="flex items-center gap-5 text-xs flex-wrap" style={{ color: "var(--muted)" }}>
         {[
-          { color: "#10b981",        label: "Normal" },
-          { color: "#f59e0b",        label: "Watch — click WHY? on station" },
-          { color: "#ef4444",        label: "Anomaly / Fault — click WHY? to explain" },
-          { color: "var(--muted)",   label: "· Sensor-poor (GP imputed)", opacity: 0.6 },
+          { color: "#10b981", label: "Normal" },
+          { color: "#f59e0b", label: "Watch — click WHY? to explain" },
+          { color: "#ef4444", label: "Fault / Anomaly" },
+          { color: "var(--muted)", label: "· Legacy (GP imputed)", opacity: 0.6 },
         ].map(({ color, label, opacity }) => (
           <div key={label} className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full" style={{ background: color, opacity }} />
@@ -142,12 +121,11 @@ export default function LiveFloorPage() {
         ))}
       </div>
 
-      {/* Main — factory map + alert panel */}
+      {/* Main content */}
       <div className="flex gap-6 flex-1">
         <div className="flex-1 min-w-0">
           <FactoryFloorMap stations={stations} cycleHistories={cycleHistories} />
         </div>
-
         <div className="w-80 shrink-0 flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <Bell size={14} color="var(--danger)" />
