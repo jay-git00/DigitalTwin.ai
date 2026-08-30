@@ -175,8 +175,9 @@ This aligns directly with Accenture's **Net Zero by 2025** commitment and provid
 
 | Name | Role |
 |---|---|
-| Jayanth | ML Engineering · Backend · Architecture |
-| Jay | Frontend · UI/UX · Integration |
+| Jayanth | AI & System Architecture |
+| Abhinav | Industrial Integration & Telemetry |
+| Sagar | Frontend UX & Data Analytics |
 
 ---
 
