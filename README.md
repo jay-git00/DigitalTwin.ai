@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🏭 AI AssemblyTwin
+#  AI AssemblyTwin
 
 ### *Real-time AI-powered Digital Twin for Vehicle Assembly*
 
@@ -15,18 +15,18 @@
 
 ---
 
-## 🎯 What It Does
+##  What It Does
 
 AI AssemblyTwin is a **live, full-stack Digital Twin** of a 45-station vehicle assembly line. It doesn't replay recorded data — it runs a real SimPy simulation, streams telemetry via WebSocket, and runs four ML models in real-time to:
 
-- 🔴 **Detect anomalies** (Isolation Forest) before they become defects
-- 📈 **Predict bottlenecks** (PyTorch LSTM) from cycle-time trends
-- 🔗 **Trace defect propagation** (Random Forest) from origin station to QC
-- 🩺 **Impute missing sensor data** (Gaussian Process) for legacy stations with uncertainty bounds
+-  **Detect anomalies** (Isolation Forest) before they become defects
+-  **Predict bottlenecks** (PyTorch LSTM) from cycle-time trends
+-  **Trace defect propagation** (Random Forest) from origin station to QC
+-  **Impute missing sensor data** (Gaussian Process) for legacy stations with uncertainty bounds
 
 ---
 
-## 🚀 Quick Start
+##  Quick Start
 
 > **Requirements:** Python 3.11+ · Node.js 20+
 
@@ -55,7 +55,7 @@ Open **[http://localhost:3000](http://localhost:3000)**
 
 ---
 
-## 🗺️ Pages & Features
+##  Pages & Features
 
 | Page | What You See |
 |---|---|
@@ -68,7 +68,7 @@ Open **[http://localhost:3000](http://localhost:3000)**
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 ┌────────────────────────────────────────────────────────┐
@@ -103,7 +103,7 @@ Open **[http://localhost:3000](http://localhost:3000)**
 
 ---
 
-## 📡 API Reference
+##  API Reference
 
 | Endpoint | Description |
 |---|---|
@@ -123,7 +123,7 @@ Open **[http://localhost:3000](http://localhost:3000)**
 
 ---
 
-## 🧠 ML Models
+## ML Models
 
 All models are pre-trained and loaded at startup from `backend/models/artifacts/`.
 
@@ -136,7 +136,7 @@ All models are pre-trained and loaded at startup from `backend/models/artifacts/
 
 ---
 
-## 🎬 Demo Walkthrough
+## Demo Walkthrough
 
 ### 1 — Before / After Toggle
 On the Live Floor (`/`), toggle **"Digital Twin: OFF"**. The banner shows what would happen without the twin: 12 vehicles passed QC with defects, ₹48L rework cost. Toggle it back **ON** to show what the twin actually prevented.
@@ -157,7 +157,7 @@ Go to `/analytics` → **ESG / Sustainability**. Every prevented scrap vehicle =
 
 ---
 
-## 🌿 ESG Alignment
+##  ESG Alignment
 
 AI AssemblyTwin directly contributes to Accenture's sustainability commitments:
 
@@ -169,7 +169,7 @@ Each prevented scrap vehicle saves ~180 kg steel, 12L paint solvent, and ~333 kg
 
 ---
 
-## 💰 ROI Model
+##  ROI Model
 
 | Metric | Value |
 |---|---|
@@ -181,12 +181,12 @@ Each prevented scrap vehicle saves ~180 kg steel, 12L paint solvent, and ~333 kg
 
 ---
 
-## 👥 Team
+##  Team
 - Jayanth
-- Abhinav
 - Sagar
+- Abhinav
 
 ---
 
-## 📄 License
+##  License
 MIT — see [LICENSE](LICENSE)
