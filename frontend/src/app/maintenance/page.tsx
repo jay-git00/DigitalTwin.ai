@@ -23,8 +23,11 @@ const PRIORITY_CONFIG = {
 
 function CalendarGrid({ schedule }: { schedule: MaintenanceItem[] }) {
   const today = new Date();
-  const year  = today.getFullYear();
-  const month = today.getMonth();
+  const [offset, setOffset] = useState(0); // 0 = current month, 1 = next month, etc.
+
+  const displayDate = new Date(today.getFullYear(), today.getMonth() + offset, 1);
+  const year  = displayDate.getFullYear();
+  const month = displayDate.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay    = new Date(year, month, 1).getDay();
 
@@ -38,12 +41,47 @@ function CalendarGrid({ schedule }: { schedule: MaintenanceItem[] }) {
   const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const dayNames   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
+  // Count items in displayed month to show badge
+  const itemsThisMonth = schedule.filter((s) =>
+    s.due_date.startsWith(`${year}-${String(month + 1).padStart(2,"0")}`)
+  ).length;
+
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-      {/* Calendar header */}
-      <div className="flex items-center justify-center py-3 text-sm font-bold"
-           style={{ background: "var(--surface)", color: "var(--text)", borderBottom: "1px solid var(--border)" }}>
-        {monthNames[month]} {year} — AI Maintenance Calendar
+      {/* Calendar header with nav arrows */}
+      <div className="flex items-center justify-between px-4 py-3"
+           style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
+        <button
+          onClick={() => setOffset((o) => o - 1)}
+          className="px-2 py-1 rounded-lg text-sm font-bold hover:opacity-70 transition-opacity"
+          style={{ color: "var(--accent)", background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)" }}
+        >
+          ‹
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold" style={{ color: "var(--text)" }}>
+            {monthNames[month]} {year} — AI Maintenance Calendar
+          </span>
+          {itemsThisMonth > 0 && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  style={{ background: "rgba(0,212,255,0.15)", color: "var(--accent)" }}>
+              {itemsThisMonth} actions
+            </span>
+          )}
+          {offset === 0 && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+                  style={{ background: "rgba(16,185,129,0.15)", color: "#10b981" }}>
+              TODAY
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => setOffset((o) => o + 1)}
+          className="px-2 py-1 rounded-lg text-sm font-bold hover:opacity-70 transition-opacity"
+          style={{ color: "var(--accent)", background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)" }}
+        >
+          ›
+        </button>
       </div>
 
       {/* Day names */}
@@ -56,7 +94,6 @@ function CalendarGrid({ schedule }: { schedule: MaintenanceItem[] }) {
 
       {/* Calendar cells */}
       <div className="grid grid-cols-7" style={{ background: "var(--card)" }}>
-        {/* Empty cells before month start */}
         {Array.from({ length: firstDay }).map((_, i) => (
           <div key={`e${i}`} className="h-16" style={{ borderRight: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }} />
         ))}
@@ -65,19 +102,20 @@ function CalendarGrid({ schedule }: { schedule: MaintenanceItem[] }) {
           const day     = i + 1;
           const dateStr = `${year}-${String(month + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
           const items   = dateMap[dateStr] ?? [];
-          const isToday = day === today.getDate();
+          const isToday = offset === 0 && day === today.getDate();
           const highP   = items.find((x) => x.priority === "HIGH");
-          const bgColor = highP ? "rgba(239,68,68,0.06)" : items.length ? "rgba(245,158,11,0.04)" : "transparent";
+          const medP    = items.find((x) => x.priority === "MED");
+          const bgColor = highP ? "rgba(239,68,68,0.08)" : medP ? "rgba(245,158,11,0.06)" : items.length ? "rgba(16,185,129,0.04)" : "transparent";
 
           return (
             <div
               key={day}
               className="relative h-16 p-1 flex flex-col gap-0.5 overflow-hidden"
               style={{
-                background:  bgColor,
-                borderRight: "1px solid var(--border)",
-                borderBottom:"1px solid var(--border)",
-                outline:     isToday ? "2px solid var(--accent)" : "none",
+                background:   bgColor,
+                borderRight:  "1px solid var(--border)",
+                borderBottom: "1px solid var(--border)",
+                outline:      isToday ? "2px solid var(--accent)" : "none",
                 outlineOffset: "-2px",
               }}
             >
@@ -106,30 +144,33 @@ function CalendarGrid({ schedule }: { schedule: MaintenanceItem[] }) {
   );
 }
 
+
 export default function MaintenancePage() {
   const [schedule, setSchedule] = useState<MaintenanceItem[]>([]);
   const [loading,  setLoading]  = useState(true);
 
+  const seedData = () => {
+    const today = new Date();
+    const fmt   = (d: Date) => d.toISOString().slice(0, 10);
+    const add   = (n: number) => { const d = new Date(today); d.setDate(d.getDate() + n); return d; };
+    return [
+      { station_id: 12, action: "Tooling Replacement",   due_date: fmt(add(3)),  days_away: 3,  drift_pct: 22.1, priority: "HIGH" as const, estimated_downtime_h: 2,   cost_inr: 150000 },
+      { station_id:  7, action: "Calibration Check",     due_date: fmt(add(5)),  days_away: 5,  drift_pct: 12.4, priority: "HIGH" as const, estimated_downtime_h: 0.5, cost_inr: 40000  },
+      { station_id: 23, action: "Preventive Inspection", due_date: fmt(add(9)),  days_away: 9,  drift_pct:  8.2, priority: "MED"  as const, estimated_downtime_h: 0.5, cost_inr: 40000  },
+      { station_id: 19, action: "Sensor Installation",   due_date: fmt(add(14)), days_away: 14, drift_pct:  5.1, priority: "MED"  as const, estimated_downtime_h: 1,   cost_inr: 80000  },
+      { station_id: 34, action: "Preventive Inspection", due_date: fmt(add(18)), days_away: 18, drift_pct:  4.0, priority: "LOW"  as const, estimated_downtime_h: 0.5, cost_inr: 40000  },
+      { station_id: 41, action: "Calibration Check",     due_date: fmt(add(22)), days_away: 22, drift_pct:  3.5, priority: "LOW"  as const, estimated_downtime_h: 0.5, cost_inr: 40000  },
+    ];
+  };
+
   useEffect(() => {
     fetchJSON<{ schedule: MaintenanceItem[] }>("/api/maintenance/schedule")
       .then(({ schedule: s }) => {
-        // If live backend returns empty (not enough data yet), seed with illustrative data
-        if (s.length === 0) {
-          const today = new Date();
-          const fmt   = (d: Date) => d.toISOString().slice(0, 10);
-          const add   = (n: number) => { const d = new Date(today); d.setDate(d.getDate() + n); return d; };
-          s = [
-            { station_id: 12, action: "Tooling Replacement", due_date: fmt(add(3)),  days_away: 3,  drift_pct: 22.1, priority: "HIGH", estimated_downtime_h: 2,   cost_inr: 150000 },
-            { station_id:  7, action: "Calibration Check",   due_date: fmt(add(5)),  days_away: 5,  drift_pct: 12.4, priority: "HIGH", estimated_downtime_h: 0.5, cost_inr: 40000  },
-            { station_id: 23, action: "Preventive Inspection",due_date: fmt(add(9)), days_away: 9,  drift_pct:  8.2, priority: "MED",  estimated_downtime_h: 0.5, cost_inr: 40000  },
-            { station_id: 19, action: "Sensor Installation",  due_date: fmt(add(14)),days_away: 14, drift_pct:  5.1, priority: "MED",  estimated_downtime_h: 1,   cost_inr: 80000  },
-            { station_id: 34, action: "Preventive Inspection",due_date: fmt(add(18)),days_away: 18, drift_pct:  4.0, priority: "LOW",  estimated_downtime_h: 0.5, cost_inr: 40000  },
-            { station_id: 41, action: "Calibration Check",    due_date: fmt(add(22)),days_away: 22, drift_pct:  3.5, priority: "LOW",  estimated_downtime_h: 0.5, cost_inr: 40000  },
-          ];
-        }
-        setSchedule(s);
+        setSchedule(s.length > 0 ? s : seedData());
       })
-      .catch(() => {})
+      .catch(() => {
+        setSchedule(seedData());
+      })
       .finally(() => setLoading(false));
   }, []);
 

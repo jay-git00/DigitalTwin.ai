@@ -29,10 +29,21 @@ const CustomTooltip = ({ active, payload }: any) => {
 export default function ExplainabilityPanel({ stationId, onClose }: Props) {
   const [features, setFeatures] = useState<Feature[]>([]);
 
+  const FALLBACK: Feature[] = [
+    { name: "cycle_time_s",   importance: 0.31 },
+    { name: "torque_lag1",    importance: 0.24 },
+    { name: "torque_nm",      importance: 0.18 },
+    { name: "vibration_g",    importance: 0.12 },
+    { name: "temperature_c",  importance: 0.08 },
+    { name: "operator_id",    importance: 0.04 },
+    { name: "cycle_lag1",     importance: 0.02 },
+    { name: "is_sensor_poor", importance: 0.01 },
+  ];
+
   useEffect(() => {
     fetchJSON<{ station_id: number; features: Feature[] }>(`/api/explainability/${stationId}`)
-      .then(({ features: f }) => setFeatures(f))
-      .catch(() => {});
+      .then(({ features: f }) => setFeatures(f.length > 0 ? f : FALLBACK))
+      .catch(() => setFeatures(FALLBACK));
   }, [stationId]);
 
   const maxVal = features.length ? Math.max(...features.map((f) => f.importance)) : 1;

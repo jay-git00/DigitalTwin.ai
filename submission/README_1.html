@@ -1,0 +1,155 @@
+<html><head><style>body{font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto;}</style></head><body><h1>AI AssemblyTwin</h1>
+<p>Live digital twin and predictive analytics platform for a vehicle assembly line. Built for the Accenture Innovation Challenge 2026 (Problem Statement: DigitalTwin.ai).</p>
+<h2>Project Overview</h2>
+<p>AI AssemblyTwin simulates a 45-station vehicle assembly line using SimPy discrete-event simulation and streams telemetry in real time to a Next.js web application. Machine learning models run against the live telemetry stream to detect cycle-time anomalies, forecast bottlenecks before line stoppage occurs, impute missing sensor metrics on legacy stations, and trace quality defects back to their upstream origins.</p>
+<p>The application includes five dedicated pages for different operational roles:
+- <strong>Live Floor (<code>/</code>)</strong>: Interactive 45-station map, real-time KPI metrics, active alerts, and virtual intervention simulator.
+- <strong>Analytics (<code>/analytics</code>)</strong>: Multi-stakeholder dashboards covering shift throughput, plant manager maintenance recommendations, leadership ROI calculator, and ESG metrics.
+- <strong>Defect Trace (<code>/defect-trace</code>)</strong>: Upstream root-cause analysis showing how parameter variations propagate downstream to QC stations.
+- <strong>Predictive Maintenance (<code>/maintenance</code>)</strong>: Maintenance calendar and priority schedule based on model risk scores.
+- <strong>Multi-Site (<code>/multisite</code>)</strong>: Multi-factory overview dashboard comparing performance across different manufacturing sites.</p>
+<hr />
+<h2>Architecture &amp; System Design</h2>
+<p><code>┌────────────────────────────────────────┐
+                               │       SimPy Discrete-Event Engine      │
+                               │   (45 Stations, Simulated Telemetry)   │
+                               └───────────────────┬────────────────────┘
+                                                   │ Real-time Events
+                                                   ▼
+ ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │                                       FastAPI Backend                                           │
+ │                                                                                                 │
+ │  ┌───────────────────────┐   ┌────────────────────────┐   ┌──────────────────────────────────┐  │
+ │  │ Gaussian Process (GPR) │   │ Isolation Forest (iForest) │   │  NumPy LSTM &amp; Random Forest      │  │
+ │  │ Sensor Imputation      │   │ Anomaly Detection      │   │  Bottleneck &amp; Defect Prediction  │  │
+ │  └───────────────────────┘   └────────────────────────┘   └──────────────────────────────────┘  │
+ └─────────────────────────────────────────┬───────────────────────────────────────────────────────┘
+                                           │ WebSockets (/ws/live) &amp; REST API
+                                           ▼
+ ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │                                Next.js Frontend Dashboard                                       │
+ │                                                                                                 │
+ │  ┌───────────────────────┐   ┌────────────────────────┐   ┌──────────────────────────────────┐  │
+ │  │  Live Floor Map UI    │   │   Analytics Dashboard  │   │   Upstream Defect Trace Graph    │  │
+ │  └───────────────────────┘   └────────────────────────┘   └──────────────────────────────────┘  │
+ └─────────────────────────────────────────────────────────────────────────────────────────────────┘</code></p>
+<h3>Machine Learning Models</h3>
+<ol>
+<li><strong>Gaussian Process Sensor Imputation (GPR)</strong></li>
+<li>Imputes missing torque, vibration, and temperature metrics for legacy stations without physical sensors using surrounding telemetry.</li>
+<li>
+<p>Provides explicit confidence intervals ($\sigma$ uncertainty bounds) displayed in the UI.</p>
+</li>
+<li>
+<p><strong>Unsupervised Anomaly Detection (Isolation Forest)</strong></p>
+</li>
+<li>
+<p>Evaluates rolling 10-cycle telemetry buffers across all 45 stations to flag cycle-time drift and vibration anomalies.</p>
+</li>
+<li>
+<p><strong>Temporal Bottleneck Prediction (NumPy LSTM)</strong></p>
+</li>
+<li>Evaluates multi-station cycle-time trends over time to forecast impending bottleneck formation 15–30 minutes before blockage.</li>
+<li>
+<p>Uses exported model weights executed via pure NumPy matrix operations to run lightweight inference without heavy GPU runtime overhead.</p>
+</li>
+<li>
+<p><strong>Multi-Causal Defect Trace (Random Forest)</strong></p>
+</li>
+<li>Analyzes station feature correlations to identify upstream root causes (e.g., Station 7 torque variation) that result in Station 44 quality failures.</li>
+</ol>
+<hr />
+<h2>Model Artifacts</h2>
+<p>Pre-trained model artifacts are stored in <code>backend/models/artifacts/</code> (~67 MB total):</p>
+<p>| Artifact | File Size | Description |
+|---|---|---|
+| <code>anomaly_models.pkl</code> | ~43.25 MB | Trained Isolation Forest models |
+| <code>sensor_imputer.pkl</code> | ~15.71 MB | Trained Gaussian Process scalers &amp; estimators |
+| <code>defect_predictor.pkl</code> | ~7.15 MB | Trained Random Forest defect classifier |
+| <code>bottleneck_lstm_weights.npz</code> | ~0.91 MB | Exported NumPy LSTM weights for lightweight inference |
+| <code>anomaly_scalers.pkl</code> | ~0.02 MB | Feature scaling parameters |
+| <code>bottleneck_scaler.pkl</code> | &lt; 0.01 MB | Sequence scaling parameters |</p>
+<hr />
+<h2>Local Setup &amp; Execution</h2>
+<h3>Prerequisites</h3>
+<ul>
+<li><strong>Python</strong>: 3.10+ (3.11 recommended)</li>
+<li><strong>Node.js</strong>: 18+ (20+ recommended)</li>
+</ul>
+<h3>1. Backend Setup</h3>
+<p>```bash
+cd backend
+python -m venv venv</p>
+<h1>On Windows:</h1>
+<p>venv\Scripts\activate</p>
+<h1>On Linux/macOS:</h1>
+<p>source venv/bin/activate</p>
+<p>pip install -r requirements.txt
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+<code>``
+The FastAPI server will start at</code>http://127.0.0.1:8000` and stream live simulation events via WebSockets.</p>
+<h3>2. Frontend Setup</h3>
+<p>In a second terminal:</p>
+<p><code>bash
+cd frontend
+npm install
+npm run dev -- -p 3000</code>
+Open <strong><a href="http://localhost:3000">http://localhost:3000</a></strong> in your browser.</p>
+<hr />
+<h2>Demo Instructions</h2>
+<p>Use the <strong>Demo Controls</strong> panel at the bottom right of the Live Floor page to test scenarios:</p>
+<h3>1. Bottleneck &amp; Intervention Flow</h3>
+<ol>
+<li>Open the <strong>Live Floor</strong> page.</li>
+<li>Click <strong>Inject Bottleneck (Station 12)</strong>.</li>
+<li>Watch Station 12's cycle time degrade from ~62s to &gt;90s over 15–30 seconds.</li>
+<li>An active <strong>Bottleneck Alert</strong> card will populate in the Active Alerts panel.</li>
+<li>Click <strong>Simulate →</strong> on the alert card to open the Intervention Simulator.</li>
+<li>Test any of the 3 candidate interventions:</li>
+<li><strong>Add 1 Technician</strong> (+73% recovery)</li>
+<li><strong>Reduce Feed Rate 15%</strong> (+55% recovery)</li>
+<li><strong>Pause Upstream Buffer</strong> (+100% recovery)</li>
+<li>Approve the intervention. Station 12 will recover to normal baseline (~59s/OK) and the alert will resolve.</li>
+</ol>
+<h3>2. Defect Origin &amp; Trace Flow</h3>
+<ol>
+<li>Click <strong>Inject Defect (Station 7)</strong>.</li>
+<li>Navigate to the <strong>Defect Trace</strong> page (<code>/defect-trace</code>).</li>
+<li>Select Station 7 as the defect origin and load the vehicle profile.</li>
+<li>Review the risk propagation timeline showing how Station 7 torque offset propagates to Station 44 (QC).</li>
+</ol>
+<h3>3. Simulation Reset</h3>
+<ol>
+<li>Click <strong>Reset Simulation</strong>.</li>
+<li>Vehicles Today resets to 0, active alerts clear, and all 45 stations return to <code>IDLE / —</code> before starting a fresh run from Station 1.</li>
+</ol>
+<hr />
+<h2>Deployment &amp; Execution Notes</h2>
+<ul>
+<li><strong>Persistent WebSockets &amp; Simulation Engine</strong>: The FastAPI backend runs a continuous SimPy simulation thread and streams events over WebSockets (<code>/ws/live</code>). Deployments require a hosting environment that supports long-running Python background processes and persistent WebSockets rather than short-lived stateless functions.</li>
+<li><strong>Lightweight LSTM Inference</strong>: The bottleneck prediction model weights were serialized to NumPy (<code>bottleneck_lstm_weights.npz</code>) to allow zero-overhead inference without requiring PyTorch at runtime, reducing memory requirements for low-memory container tiers.</li>
+</ul>
+<hr />
+<h2>Project Structure</h2>
+<p><code>DigitalTwin.ai/
+├── PROPOSAL.md                  # Project proposal document
+├── README.md                    # System documentation
+├── backend/
+│   ├── main.py                  # FastAPI server, WebSocket handlers &amp; API routes
+│   ├── requirements.txt         # Backend Python dependencies
+│   ├── data/                    # Data generation &amp; training scripts
+│   ├── models/
+│   │   ├── anomaly_detector.py  # Isolation Forest implementation
+│   │   ├── bottleneck_predictor.py # NumPy LSTM prediction engine
+│   │   ├── defect_predictor.py  # Random Forest defect classifier
+│   │   ├── sensor_imputer.py    # Gaussian Process Regression implementation
+│   │   └── artifacts/           # Trained ML model weights (~67 MB)
+│   └── simulator/
+│       └── assembly_line.py     # SimPy 45-station discrete-event simulation engine
+└── frontend/
+    ├── package.json             # Next.js frontend dependencies
+    ├── src/
+    │   ├── app/                 # Next.js App Router pages
+    │   ├── components/          # React components
+    │   ├── lib/                 # Utilities &amp; WebSocket hook
+    │   └── types/               # TypeScript type definitions</code></p></body></html>
