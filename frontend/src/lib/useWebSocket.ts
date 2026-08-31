@@ -2,7 +2,14 @@
 import { useEffect, useRef } from "react";
 import { WSMessage } from "@/types";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://127.0.0.1:8000/ws/live";
+function getWsUrl(): string {
+  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
+  const api = process.env.NEXT_PUBLIC_API_URL;
+  if (api) {
+    return api.replace(/^http/, "ws") + "/ws/live";
+  }
+  return "ws://127.0.0.1:8000/ws/live";
+}
 
 type Handler = (msg: WSMessage) => void;
 
@@ -22,7 +29,7 @@ export function useWebSocket(onMessage: Handler) {
       }
 
       try {
-        const ws = new WebSocket(WS_URL);
+        const ws = new WebSocket(getWsUrl());
         wsRef.current = ws;
 
         ws.onmessage = (e) => {
