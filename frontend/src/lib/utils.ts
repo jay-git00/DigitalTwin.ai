@@ -27,7 +27,7 @@ export const ZONE_NAMES: Record<string, string> = {
 };
 
 export function getApiBase(): string {
-  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/+$/, "");
+  // Hardcoded for Vercel production deployment
   if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
     return "https://digitaltwin-backend-b54j.onrender.com";
   }
