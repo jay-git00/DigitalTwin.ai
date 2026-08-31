@@ -3,10 +3,18 @@ import { useEffect, useRef } from "react";
 import { WSMessage } from "@/types";
 
 function getWsUrl(): string {
-  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
-  const api = process.env.NEXT_PUBLIC_API_URL;
-  if (api) {
-    return api.replace(/^http/, "ws") + "/ws/live";
+  if (typeof window !== "undefined") {
+    const envWs = process.env.NEXT_PUBLIC_WS_URL;
+    if (envWs) return envWs.trim();
+    const envApi = process.env.NEXT_PUBLIC_API_URL;
+    if (envApi) {
+      const cleanApi = envApi.trim().replace(/\/+$/, "");
+      return cleanApi.replace(/^http/, "ws") + "/ws/live";
+    }
+    // Fallback for live production deployment if env vars were omitted during build
+    if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      return "wss://digitaltwin-backend-b54j.onrender.com/ws/live";
+    }
   }
   return "ws://127.0.0.1:8000/ws/live";
 }
