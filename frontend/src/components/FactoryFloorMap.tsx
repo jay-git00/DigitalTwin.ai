@@ -1,11 +1,13 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Info } from "lucide-react";
 import { StationStatus } from "@/types";
 import { stationColor, stationLabel, fetchJSON } from "@/lib/utils";
 import StationDrawer from "./StationDrawer";
 import Sparkline from "./Sparkline";
 import ExplainabilityPanel from "./ExplainabilityPanel";
+import CascadeGraph from "./CascadeGraph";
 
 const ZONE_LAYOUT = [
   { zone: "body",  label: "ZONE A — Body Construction", ids: Array.from({ length: 15 }, (_, i) => i + 1)  },
@@ -57,6 +59,7 @@ interface Props {
 export default function FactoryFloorMap({ stations, cycleHistories = {} }: Props) {
   const [selected,   setSelected]   = useState<number | null>(null);
   const [explainSid, setExplainSid] = useState<number | null>(null);
+  const [cascadeSid, setCascadeSid] = useState<number | null>(null);
 
   const handleClick = useCallback((id: number) => {
     setSelected((prev) => (prev === id ? null : id));
@@ -70,6 +73,36 @@ export default function FactoryFloorMap({ stations, cycleHistories = {} }: Props
 
   return (
     <div className="flex flex-col gap-4 w-full">
+      {/* 3D Factory Floor Hero Banner */}
+      <div className="relative w-full rounded-2xl overflow-hidden" style={{ height: 220, border: "1px solid rgba(0,212,255,0.2)" }}>
+        <img
+          src="/factory_floor_3d.png"
+          alt="3D Isometric Factory Floor — Chennai Plant"
+          className="w-full h-full object-cover"
+          style={{ opacity: 0.85 }}
+        />
+        {/* Gradient overlay so text reads cleanly */}
+        <div className="absolute inset-0" style={{ background: "linear-gradient(to right, rgba(10,14,27,0.7) 0%, rgba(10,14,27,0.1) 50%, rgba(10,14,27,0.7) 100%)" }} />
+        {/* Zone labels overlay */}
+        <div className="absolute inset-0 flex items-end justify-around px-6 pb-4">
+          {[
+            { label: "ZONE A", sub: "Body Construction", color: "#00d4ff" },
+            { label: "ZONE B", sub: "Paint Shop",        color: "#7c3aed" },
+            { label: "ZONE C", sub: "Final Assembly",    color: "#10b981" },
+          ].map(({ label, sub, color }) => (
+            <div key={label} className="flex flex-col items-center">
+              <span className="text-xs font-black tracking-widest" style={{ color }}>{label}</span>
+              <span className="text-[9px] font-medium" style={{ color: "rgba(255,255,255,0.5)" }}>{sub}</span>
+            </div>
+          ))}
+        </div>
+        {/* Top-left badge */}
+        <div className="absolute top-3 left-4 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "#10b981" }} />
+          <span className="text-[10px] font-bold tracking-widest" style={{ color: "#10b981" }}>LIVE DIGITAL TWIN · CHENNAI PLANT</span>
+        </div>
+      </div>
+
       {ZONE_LAYOUT.map(({ zone, label, ids }) => (
         <div
           key={zone}
@@ -130,8 +163,8 @@ export default function FactoryFloorMap({ stations, cycleHistories = {} }: Props
                          style={{ background: "var(--muted)", opacity: 0.6 }} />
                   )}
 
-                  {/* Station ID */}
-                  <span className="text-[9px] font-bold" style={{ color: "var(--muted)" }}>
+                  {/* ID */}
+                  <span className="text-xs font-bold" style={{ color: "var(--text)" }}>
                     S{sid.toString().padStart(2, "0")}
                   </span>
 
@@ -182,12 +215,24 @@ export default function FactoryFloorMap({ stations, cycleHistories = {} }: Props
         )}
       </AnimatePresence>
 
-      {/* Station detail drawer */}
+      {/* Side drawer for station details */}
       <AnimatePresence>
         {selected !== null && stations[selected] && (
           <StationDrawer
             station={stations[selected]}
             onClose={() => setSelected(null)}
+            onOpenCascade={() => setCascadeSid(selected)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Causal Cascade Graph overlay */}
+      <AnimatePresence>
+        {cascadeSid !== null && (
+          <CascadeGraph
+            stations={stations}
+            triggerId={cascadeSid}
+            onClose={() => setCascadeSid(null)}
           />
         )}
       </AnimatePresence>

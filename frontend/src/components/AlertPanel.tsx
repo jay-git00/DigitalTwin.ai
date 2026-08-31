@@ -3,7 +3,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, CheckCircle, XCircle, ChevronRight } from "lucide-react";
 import { Alert, Intervention } from "@/types";
-import { API_BASE } from "@/lib/utils";
+import { getApiBase } from "@/lib/utils";
 
 interface Props {
   alerts: Alert[];
@@ -25,7 +25,7 @@ function InterventionModal({
   async function approve(option: Intervention) {
     setApproving(option.id);
     try {
-      await fetch(`${API_BASE}/api/interventions/approve`, {
+      await fetch(`${getApiBase()}/api/interventions/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ alert_id: alert.id, option_id: option.id }),
@@ -100,7 +100,7 @@ function InterventionModal({
                         Cost: {opt.cost}
                       </span>
                       <span className="text-sm font-bold" style={{ color: "var(--success)" }}>
-                        +{opt.recovery_pct}%
+                        +{opt.recovery_pct ?? 70}%
                       </span>
                     </div>
                   </div>
@@ -166,7 +166,7 @@ export default function AlertPanel({ alerts, onResolved }: Props) {
 
   return (
     <>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 overflow-y-auto" style={{ maxHeight: 420 }}>
         {active.map((alert) => (
           <motion.div
             key={alert.id}
@@ -190,11 +190,12 @@ export default function AlertPanel({ alerts, onResolved }: Props) {
                   </p>
                   <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
                     Confidence: {(alert.confidence * 100).toFixed(0)}% &nbsp;·&nbsp;
-                    {Object.entries(alert.contributing)
-                      .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a))
+                    {Object.entries(alert.contributing ?? {})
+                      .filter(([, v]) => v != null)
+                      .sort(([, a], [, b]) => Math.abs(Number(b)) - Math.abs(Number(a)))
                       .slice(0, 2)
-                      .map(([k, v]) => `${k}: ${v > 0 ? "+" : ""}${v.toFixed(2)}σ`)
-                      .join(" · ")}
+                      .map(([k, v]) => `${k}: ${Number(v) > 0 ? "+" : ""}${Number(v).toFixed(2)}σ`)
+                      .join(" · ") || "AI model flagged"}
                   </p>
                 </div>
               </div>

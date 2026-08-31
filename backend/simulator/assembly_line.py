@@ -73,13 +73,9 @@ class StationEvent:
 
 @dataclass
 class FaultState:
-    """Tracks active faults in the simulation."""
-    bottleneck_station: Optional[int] = None
-    bottleneck_start: Optional[float] = None
-    bottleneck_severity: float = 0.0       # 0.0 → 1.0 ramp over time
-    defect_station: Optional[int] = None
-    defect_start: Optional[float] = None
-    defect_torque_offset: float = 0.0
+    """Tracks active faults in the simulation across multiple stations simultaneously."""
+    bottlenecks: dict[int, float] = field(default_factory=dict)         # station_id -> start_time
+    defects: dict[int, tuple[float, float]] = field(default_factory=dict) # station_id -> (start_time, torque_offset)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -170,11 +166,11 @@ def _sample_metrics(
 
     # Base cycle time with optional bottleneck drift
     ct_mean, ct_std = params["cycle_time"]
-    if fault_state.bottleneck_station == station_id and fault_state.bottleneck_start is not None:
-        elapsed = max(0.0, sim_time - fault_state.bottleneck_start)
-        # Severity ramps over 25 seconds, max +60% cycle time
-        fault_state.bottleneck_severity = min(elapsed / 25.0, 1.0)
-        ct_mean = ct_mean * (1.0 + 0.60 * fault_state.bottleneck_severity)
+    if station_id in fault_state.bottlenecks:
+        b_start = fault_state.bottlenecks[station_id]
+        elapsed = max(0.0, sim_time - b_start)
+        severity = min(elapsed / 25.0, 1.0)
+        ct_mean = ct_mean * (1.0 + 0.60 * severity)
 
     cycle_time = max(5.0, rng.normal(ct_mean, ct_std))
 
@@ -184,8 +180,8 @@ def _sample_metrics(
     # Torque — defect fault injects a systematic offset upstream
     t_mean, t_std = params["torque"]
     torque_offset = 0.0
-    if fault_state.defect_station == station_id and fault_state.defect_start is not None:
-        torque_offset = fault_state.defect_torque_offset
+    if station_id in fault_state.defects:
+        _, torque_offset = fault_state.defects[station_id]
     torque = rng.normal(t_mean + torque_offset, t_std)
 
     vibration = max(0.0, rng.normal(*params["vibration"]))
@@ -225,25 +221,16 @@ class AssemblyLineSimulation:
         with self._lock:
             sim_now = self._env.now if self._env is not None else 0.0
             if fault_type == "bottleneck":
-                self.fault_state.bottleneck_station = station_id
-                self.fault_state.bottleneck_start = sim_now
-                self.fault_state.bottleneck_severity = 0.0
+                self.fault_state.bottlenecks[station_id] = sim_now
             elif fault_type == "defect":
-                self.fault_state.defect_station = station_id
-                self.fault_state.defect_start = sim_now
-                self.fault_state.defect_torque_offset = self.rng.uniform(12.0, 20.0)
+                offset = float(self.rng.uniform(12.0, 20.0))
+                self.fault_state.defects[station_id] = (sim_now, offset)
 
     def inject_intervention(self, option: str, station_id: int):
         """Apply an approved intervention — resolves fault and recovers station performance."""
         with self._lock:
-            if self.fault_state.bottleneck_station == station_id:
-                self.fault_state.bottleneck_severity = 0.0
-                self.fault_state.bottleneck_station = None
-                self.fault_state.bottleneck_start = None
-            if self.fault_state.defect_station == station_id:
-                self.fault_state.defect_station = None
-                self.fault_state.defect_start = None
-                self.fault_state.defect_torque_offset = 0.0
+            self.fault_state.bottlenecks.pop(station_id, None)
+            self.fault_state.defects.pop(station_id, None)
 
     def reset(self):
         """Reset all faults (for demo purposes)."""
@@ -272,10 +259,8 @@ class AssemblyLineSimulation:
         for vid in range(1, total_vehicles + 1):
             vehicle_sim_time = (vid - 1) * 30.0
             with self._lock:
-                b_station = self.fault_state.bottleneck_station
-                b_start   = self.fault_state.bottleneck_start
-                d_station = self.fault_state.defect_station
-                d_offset  = self.fault_state.defect_torque_offset
+                b_dict = dict(self.fault_state.bottlenecks)
+                d_dict = dict(self.fault_state.defects)
 
             for station_id in range(1, 46):
                 zone    = _get_zone(station_id)
@@ -283,8 +268,8 @@ class AssemblyLineSimulation:
                 is_poor = station_id in SENSOR_POOR_STATIONS
 
                 ct_mean, ct_std = params["cycle_time"]
-                if b_station == station_id and b_start is not None:
-                    elapsed = vehicle_sim_time - b_start
+                if station_id in b_dict:
+                    elapsed = vehicle_sim_time - b_dict[station_id]
                     sev     = min(max(elapsed / 2400.0, 0.0), 1.0)
                     ct_mean = ct_mean * (1.0 + 0.60 * sev)
                 cycle_time = float(max(5.0, self.rng.normal(ct_mean, ct_std)))
@@ -292,13 +277,13 @@ class AssemblyLineSimulation:
                 torque = vibration = temperature = None
                 if not is_poor:
                     t_mean, t_std = params["torque"]
-                    offset      = d_offset if d_station == station_id else 0.0
+                    offset = d_dict[station_id][1] if station_id in d_dict else 0.0
                     torque      = float(self.rng.normal(t_mean + offset, t_std))
                     vibration   = float(max(0.0, self.rng.normal(*params["vibration"])))
                     temperature = float(self.rng.normal(*params["temp"]))
 
                 operator_id  = int(vehicle_sim_time // SHIFT_DURATION_S % N_OPERATORS) + 1
-                fault_active = int(b_station == station_id or d_station == station_id)
+                fault_active = int(station_id in b_dict or station_id in d_dict)
                 ts           = sim_start_ts + vehicle_sim_time
 
                 batch.append((
@@ -360,20 +345,13 @@ class AssemblyLineSimulation:
                 zone = _get_zone(station_id)
                 with self._lock:
                     fs_snap = FaultState(
-                        bottleneck_station=self.fault_state.bottleneck_station,
-                        bottleneck_start=self.fault_state.bottleneck_start,
-                        bottleneck_severity=self.fault_state.bottleneck_severity,
-                        defect_station=self.fault_state.defect_station,
-                        defect_start=self.fault_state.defect_start,
-                        defect_torque_offset=self.fault_state.defect_torque_offset,
+                        bottlenecks=dict(self.fault_state.bottlenecks),
+                        defects=dict(self.fault_state.defects),
                     )
                 ct, torque, vib, temp = _sample_metrics(
                     station_id, zone, fs_snap, env.now, self.rng
                 )
-                is_fault = (
-                    fs_snap.bottleneck_station == station_id or
-                    fs_snap.defect_station == station_id
-                )
+                is_fault = (station_id in fs_snap.bottlenecks) or (station_id in fs_snap.defects)
                 evt = StationEvent(
                     station_id=station_id,
                     zone=zone,

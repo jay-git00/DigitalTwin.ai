@@ -46,5 +46,5 @@ export function formatINR(n: number): string {
   return `₹${n.toLocaleString("en-IN")}`;
 }
 
-/** Backward-compat alias */
-export const API_BASE = "https://digitaltwin-backend-b54j.onrender.com";
+/** Backward-compat alias — resolves to localhost in dev, Render in prod */
+export const API_BASE = getApiBase();

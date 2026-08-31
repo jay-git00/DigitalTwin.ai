@@ -8,8 +8,8 @@ import DemoControls from "@/components/DemoControls";
 import HealthGauge from "@/components/HealthGauge";
 import ROITicker from "@/components/ROITicker";
 import BeforeAfterToggle from "@/components/BeforeAfterToggle";
+import ReportGenerator from "@/components/ReportGenerator";
 import FactoryFloorMap from "@/components/FactoryFloorMap";
-import TwinGPT from "@/components/TwinGPT";
 import ESGWidget from "@/components/ESGWidget";
 import { StationStatus, WSMessage as WS } from "@/types";
 import { Activity, Bell, Zap } from "lucide-react";
@@ -86,10 +86,20 @@ export default function LiveFloorPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: "var(--text)" }}>Live Factory Floor</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            45-station vehicle assembly · Real-time digital twin · Chennai Plant
-          </p>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+                 style={{ background: "linear-gradient(135deg, #00d4ff22, #7c3aed22)", border: "1px solid rgba(0,212,255,0.3)" }}>
+              <Activity size={16} color="var(--accent)" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black" style={{ color: "var(--text)", letterSpacing: "-0.5px" }}>
+                AI AssemblyTwin
+              </h1>
+              <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                45-station digital twin · Chennai Plant · {wsConnected ? "🟢 Live telemetry" : "🟡 Connecting…"}
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
@@ -121,8 +131,13 @@ export default function LiveFloorPage() {
         </div>
       </div>
 
-      {/* Before/After toggle — THE killer demo moment */}
-      <BeforeAfterToggle interventionsApproved={interventionCount} />
+      {/* Top action row */}
+      <div className="flex items-center gap-4">
+        {/* Before/After toggle — THE killer demo moment */}
+        <BeforeAfterToggle interventionsApproved={interventionCount} />
+        {/* God-tier Executive PDF Report Generator */}
+        <ReportGenerator stations={stations} alerts={alerts} vehicles={vehicles} interventionCount={interventionCount} />
+      </div>
 
       {/* Legend */}
       <div className="flex items-center gap-5 text-xs flex-wrap" style={{ color: "var(--muted)" }}>
@@ -165,8 +180,6 @@ export default function LiveFloorPage() {
           />
         </div>
       </div>
-      {/* TwinGPT floating AI assistant */}
-      <TwinGPT stations={stations} vehicles={vehicles} anomalyCount={anomalyCount} alertCount={activeAlerts.length} />
 
       <DemoControls />
     </div>

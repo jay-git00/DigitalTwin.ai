@@ -188,6 +188,7 @@ async def process_event(event: dict) -> dict:
 
     # Anomaly detection & Fault alerts
     if event.get("fault_active"):
+        event["anomaly_score"] = -0.45
         await maybe_raise_alert(event, {})
     elif state.models_ready and len(window) >= 3:
         anom = state.anomaly_detector.predict(window, sid)
@@ -346,6 +347,69 @@ async def inject_fault(req: InjectRequest):
     return {"status": "injected", "station_id": req.station_id, "fault_type": req.fault_type}
 
 
+@app.post("/api/demo/chaos")
+async def inject_chaos():
+    """
+    CHAOS MODE: Immediately broadcasts 8 faulted stations to the frontend
+    without waiting for the sim loop. Each station gets its own alert.
+    """
+    import random
+
+    # Pick stations spread across all 3 zones for visual impact
+    zone_a = random.sample(range(1, 16), 3)   # Body Construction
+    zone_b = random.sample(range(16, 29), 2)  # Paint Shop
+    zone_c = random.sample(range(29, 46), 3)  # Final Assembly
+    chaos_stations = zone_a + zone_b + zone_c  # exactly 8
+
+    fault_types = ["bottleneck", "defect"]
+    affected = []
+
+    for sid in chaos_stations:
+        fault = random.choice(fault_types)
+        # Inject into simulator for persistence
+        state.sim.inject_fault(fault, sid)
+
+        # Build a synthetic station_update so the frontend turns red IMMEDIATELY
+        window = state.station_windows[sid]
+        last = window[-1] if window else {}
+        synthetic = {
+            **last,
+            "station_id":   sid,
+            "fault_active": True,
+            "fault_type":   fault,
+            "anomaly_score": -0.45,
+            "cycle_time_s": (last.get("cycle_time_s", 75) or 75) * 1.6,
+            "vibration_g":  (last.get("vibration_g", 1.1) or 1.1) * 2.2,
+            "temperature_c":(last.get("temperature_c", 68) or 68) + 18,
+            "sim_session_id": state.sim_session_id,
+            "vehicles_completed": state.vehicles_completed,
+        }
+        await broadcast({"type": "station_update", "data": synthetic})
+
+        # Create individual alert for each station
+        state.alert_counter += 1
+        alert = {
+            "id":           state.alert_counter,
+            "type":         fault,
+            "station_id":   sid,
+            "confidence":   0.94,
+            "eta_minutes":  random.randint(3, 12),
+            "status":       "active",
+            "created_at":   time.time(),
+            "contributing": {"cycle_time_s": 2.5, "vibration_g": 1.8},
+            "interventions": [
+                {"id": "add_technician", "label": "Deploy Emergency Crew",   "recovery_pct": 73,  "cost": "Low"},
+                {"id": "reduce_feed",    "label": "Emergency Feed Cutback",  "recovery_pct": 55,  "cost": "None"},
+                {"id": "pause_buffer",   "label": "Activate Safety Shutdown","recovery_pct": 100, "cost": "Medium"},
+            ],
+        }
+        state.active_alerts[state.alert_counter] = alert
+        await broadcast({"type": "alert", "alert": alert})
+        affected.append(sid)
+
+    return {"status": "chaos_injected", "affected_stations": affected}
+
+
 @app.post("/api/demo/reset")
 async def reset_simulation():
     # 1. Increment session ID (invalidates any events in flight from old thread)
@@ -422,37 +486,78 @@ async def get_alerts():
 
 @app.get("/api/stations/status")
 async def get_station_status():
+    # Zone baseline params (mean values) for fallback imputation display
+    ZONE_BASELINES = {
+        "body":  {"torque": 45.0, "vibration": 0.8,  "temperature": 38.0},
+        "paint": {"torque": 20.0, "vibration": 0.3,  "temperature": 55.0},
+        "final": {"torque": 60.0, "vibration": 1.1,  "temperature": 35.0},
+    }
+    def _zone(sid):
+        if sid <= 15: return "body"
+        if sid <= 28: return "paint"
+        return "final"
+
     result = []
     for sid in range(1, 46):
         window = state.station_windows[sid]
+        is_poor = sid in SENSOR_POOR_STATIONS
+        zone = _zone(sid)
+        baseline = ZONE_BASELINES[zone]
+
         if window:
             latest = window[-1]
+            # For sensor-poor stations, provide fallback estimates if GP hasn't run
+            t_imp  = latest.get("torque_nm_imputed")
+            v_imp  = latest.get("vibration_g_imputed")
+            tc_imp = latest.get("temperature_c_imputed")
+            t_unc  = latest.get("imputation_uncertainty")
+            v_unc  = latest.get("vibration_uncertainty")
+            tc_unc = latest.get("temperature_uncertainty")
+
+            if is_poor:
+                # Use cycle_time ratio to add mild drift to baseline estimates
+                ct_ratio = (latest.get("cycle_time_s") or baseline["torque"]) / 62.0
+                if t_imp is None:  t_imp  = round(baseline["torque"]       * ct_ratio, 2)
+                if v_imp is None:  v_imp  = round(baseline["vibration"]    * ct_ratio, 2)
+                if tc_imp is None: tc_imp = round(baseline["temperature"]  + (ct_ratio - 1) * 5, 2)
+                if t_unc is None:  t_unc  = round(baseline["torque"]       * 0.06, 2)
+                if v_unc is None:  v_unc  = round(baseline["vibration"]    * 0.08, 2)
+                if tc_unc is None: tc_unc = round(baseline["temperature"]  * 0.04, 2)
+
             result.append({
-                "station_id":             sid,
+                "station_id":              sid,
+                "zone":                    zone,
                 "anomaly_score":           latest.get("anomaly_score", 0.0),
                 "cycle_time_s":            latest.get("cycle_time_s", 0.0),
-                "is_sensor_poor":          sid in SENSOR_POOR_STATIONS,
+                "torque_nm":               latest.get("torque_nm"),
+                "vibration_g":             latest.get("vibration_g"),
+                "temperature_c":           latest.get("temperature_c"),
+                "is_sensor_poor":          is_poor,
                 "fault_active":            latest.get("fault_active", False),
-                "torque_nm_imputed":      latest.get("torque_nm_imputed"),
-                "imputation_uncertainty": latest.get("imputation_uncertainty"),
-                "vibration_g_imputed":     latest.get("vibration_g_imputed"),
-                "vibration_uncertainty":   latest.get("vibration_uncertainty"),
-                "temperature_c_imputed":   latest.get("temperature_c_imputed"),
-                "temperature_uncertainty": latest.get("temperature_uncertainty"),
+                "torque_nm_imputed":       t_imp,
+                "imputation_uncertainty":  t_unc,
+                "vibration_g_imputed":     v_imp,
+                "vibration_uncertainty":   v_unc,
+                "temperature_c_imputed":   tc_imp,
+                "temperature_uncertainty": tc_unc,
             })
         else:
             result.append({
-                "station_id":             sid,
+                "station_id":              sid,
+                "zone":                    zone,
                 "anomaly_score":           0.0,
                 "cycle_time_s":            0.0,
-                "is_sensor_poor":          sid in SENSOR_POOR_STATIONS,
+                "torque_nm":               None,
+                "vibration_g":             None,
+                "temperature_c":           None,
+                "is_sensor_poor":          is_poor,
                 "fault_active":            False,
-                "torque_nm_imputed":      None,
-                "imputation_uncertainty": None,
-                "vibration_g_imputed":     None,
-                "vibration_uncertainty":   None,
-                "temperature_c_imputed":   None,
-                "temperature_uncertainty": None,
+                "torque_nm_imputed":       baseline["torque"]       if is_poor else None,
+                "imputation_uncertainty":  round(baseline["torque"] * 0.06, 2) if is_poor else None,
+                "vibration_g_imputed":     baseline["vibration"]    if is_poor else None,
+                "vibration_uncertainty":   round(baseline["vibration"] * 0.08, 2) if is_poor else None,
+                "temperature_c_imputed":   baseline["temperature"]  if is_poor else None,
+                "temperature_uncertainty": round(baseline["temperature"] * 0.04, 2) if is_poor else None,
             })
     return {"stations": result, "vehicles_completed": state.vehicles_completed}
 

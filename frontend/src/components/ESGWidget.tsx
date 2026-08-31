@@ -16,8 +16,8 @@ export default function ESGWidget({ stations }: Props) {
     // Base power = 450 kW for 45 stations at idle
     // Each station adds power based on vibration and temperature
     const totalExcess = list.reduce((acc, s) => {
-      const vibrationLoad = Math.max(0, (s.vibration_g ?? 0) - 0.5) * 12;
-      const thermalLoad   = Math.max(0, (s.temperature_c ?? 0) - 40) * 0.8;
+      const vibrationLoad = Math.max(0, (s.vibration_g ?? 0) - 1.15) * 40;
+      const thermalLoad   = Math.max(0, (s.temperature_c ?? 0) - 72) * 2.5;
       const faultLoad     = s.fault_active ? 22 : 0;
       return acc + vibrationLoad + thermalLoad + faultLoad;
     }, 0);

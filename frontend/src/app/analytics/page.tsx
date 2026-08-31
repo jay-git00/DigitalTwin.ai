@@ -129,16 +129,18 @@ function ManagerTab({ throughput }: { throughput: ThroughputPoint[] }) {
           <p className="text-xs font-semibold mb-4" style={{ color: "var(--muted)" }}>
             VEHICLES COMPLETED / HOUR (LAST 24H)
           </p>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="hour" tick={{ fill: "var(--muted)", fontSize: 10 }} />
-              <YAxis tick={{ fill: "var(--muted)", fontSize: 10 }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Line type="monotone" dataKey="vehicles" stroke="var(--accent)"
-                    strokeWidth={2} dot={false} name="Vehicles" />
-            </LineChart>
-          </ResponsiveContainer>
+          <div style={{ width: "100%", height: 200, position: "relative" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="hour" tick={{ fill: "var(--muted)", fontSize: 10 }} />
+                <YAxis tick={{ fill: "var(--muted)", fontSize: 10 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Line type="monotone" dataKey="vehicles" stroke="var(--accent)"
+                      strokeWidth={2} dot={false} name="Vehicles" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </Card>
 
         {/* Recurring bottlenecks */}
@@ -146,19 +148,21 @@ function ManagerTab({ throughput }: { throughput: ThroughputPoint[] }) {
           <p className="text-xs font-semibold mb-4" style={{ color: "var(--muted)" }}>
             RECURRING BOTTLENECK STATIONS (LAST 7 DAYS)
           </p>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={BOTTLENECK_DATA} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis type="number" tick={{ fill: "var(--muted)", fontSize: 10 }} />
-              <YAxis dataKey="station" type="category" tick={{ fill: "var(--muted)", fontSize: 10 }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="count" name="Incidents" radius={[0,4,4,0]}>
-                {BOTTLENECK_DATA.map((_, i) => (
-                  <Cell key={i} fill={i === 0 ? "var(--danger)" : "var(--accent)"} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div style={{ width: "100%", height: 200, position: "relative" }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={BOTTLENECK_DATA} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis type="number" tick={{ fill: "var(--muted)", fontSize: 10 }} />
+                <YAxis dataKey="station" type="category" tick={{ fill: "var(--muted)", fontSize: 10 }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="count" name="Incidents" radius={[0,4,4,0]}>
+                  {BOTTLENECK_DATA.map((_, i) => (
+                    <Cell key={i} fill={i === 0 ? "var(--danger)" : "var(--accent)"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </Card>
       </div>
 
@@ -396,11 +400,17 @@ export default function AnalyticsPage() {
       .then(({ alerts: a }) => setAlerts(a))
       .catch(() => {});
 
-    fetchJSON<{ throughput: ThroughputPoint[] }>("/api/history/throughput")
-      .then(({ throughput: t }) => setThroughput(t)).catch(() => {});
+    const fetchThroughput = () => {
+      fetchJSON<{ throughput: ThroughputPoint[] }>("/api/history/throughput")
+        .then(({ throughput: t }) => setThroughput(t)).catch(() => {});
+    };
+    fetchThroughput();
+    const interval = setInterval(fetchThroughput, 5000);
 
     fetchJSON<{ roi: ROIStats }>("/api/roi")
       .then(({ roi: r }) => setRoi(r)).catch(() => {});
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleWS = useCallback((msg: WSMessage) => {

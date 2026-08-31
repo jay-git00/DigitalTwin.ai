@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import TwinGPT from "@/components/TwinGPT";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen" style={{ background: "var(--bg)" }}>
         <Navbar />
         <main className="pt-16">{children}</main>
+        <TwinGPT />
       </body>
     </html>
   );
