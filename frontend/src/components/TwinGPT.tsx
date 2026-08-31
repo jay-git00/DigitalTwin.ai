@@ -54,7 +54,7 @@ function generateResponse(
     if (anomalyCount === 0) return "✅ No anomalies detected right now! All 45 stations are operating within normal parameters. The Isolation Forest model is continuously scanning telemetry streams.";
     const anomalous = stationList.filter((s) => (s.anomaly_score ?? 0) < -0.05);
     return `**Anomaly Root Cause Analysis (SHAP):**\n\n${anomalous.slice(0, 3).map(s =>
-      `🔴 **S${s.station_id.toString().padStart(2,"0")}** — Anomaly Score: ${s.anomaly_score?.toFixed(3)}\n   Top driver: ${s.vibration_g > 1.5 ? "High vibration (bearing wear)" : s.temperature_c > 80 ? "Thermal overrun (coolant fault)" : s.torque_nm > 90 ? "Torque spike (jamming)" : "Cycle time deviation (pacing issue)"}\n   Confidence: ${(Math.random() * 10 + 88).toFixed(0)}%`
+      `🔴 **S${s.station_id.toString().padStart(2,"0")}** — Anomaly Score: ${s.anomaly_score?.toFixed(3)}\n   Top driver: ${(s.vibration_g ?? 0) > 1.5 ? "High vibration (bearing wear)" : (s.temperature_c ?? 0) > 80 ? "Thermal overrun (coolant fault)" : (s.torque_nm ?? 0) > 90 ? "Torque spike (jamming)" : "Cycle time deviation (pacing issue)"}\n   Confidence: ${(Math.random() * 10 + 88).toFixed(0)}%`
     ).join("\n\n")}\n\n💡 Click **WHY?** on any anomalous station for detailed SHAP importance bars.`;
   }
 
@@ -70,7 +70,7 @@ function generateResponse(
 
   // Maintenance / prediction
   if (q.includes("maintenance") || q.includes("predict") || q.includes("schedule") || q.includes("service")) {
-    return `**Predictive Maintenance Forecast:**\n\nBased on current sensor drift trends:\n\n🔧 **3 stations** flagged for maintenance in the next 30 days\n📅 Next critical window: September 5–12, 2026\n⏱ Estimated downtime averted: ~14.2 hours\n💰 Cost savings: ₹8.4L vs reactive maintenance\n\nAI models used: LSTM (drift prediction), Isolation Forest (anomaly), Random Forest (defect probability)\n\n💡 Navigate to the **Maintenance** tab to see the full AI calendar with `‹ ›` month navigation.`;
+    return `**Predictive Maintenance Forecast:**\n\nBased on current sensor drift trends:\n\n🔧 **3 stations** flagged for maintenance in the next 30 days\n📅 Next critical window: September 5-12, 2026\n⏱ Estimated downtime averted: ~14.2 hours\n💰 Cost savings: Rs.8.4L vs reactive maintenance\n\nAI models used: LSTM (drift prediction), Isolation Forest (anomaly), Random Forest (defect probability)\n\n💡 Navigate to the **Maintenance** tab to see the full AI calendar with month navigation arrows.`;
   }
 
   // Cost / ROI / savings

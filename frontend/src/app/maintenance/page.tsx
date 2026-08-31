@@ -56,7 +56,7 @@ function CalendarGrid({ schedule }: { schedule: MaintenanceItem[] }) {
           className="px-2 py-1 rounded-lg text-sm font-bold hover:opacity-70 transition-opacity"
           style={{ color: "var(--accent)", background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)" }}
         >
-          ‹
+          &lsaquo;
         </button>
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold" style={{ color: "var(--text)" }}>
@@ -80,7 +80,7 @@ function CalendarGrid({ schedule }: { schedule: MaintenanceItem[] }) {
           className="px-2 py-1 rounded-lg text-sm font-bold hover:opacity-70 transition-opacity"
           style={{ color: "var(--accent)", background: "rgba(0,212,255,0.08)", border: "1px solid rgba(0,212,255,0.2)" }}
         >
-          ›
+          &rsaquo;
         </button>
       </div>
 

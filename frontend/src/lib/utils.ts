@@ -45,3 +45,6 @@ export function formatINR(n: number): string {
   if (n >= 1_00_000)    return `₹${(n / 1_00_000).toFixed(1)} L`;
   return `₹${n.toLocaleString("en-IN")}`;
 }
+
+/** Backward-compat alias */
+export const API_BASE = "https://digitaltwin-backend-b54j.onrender.com";
