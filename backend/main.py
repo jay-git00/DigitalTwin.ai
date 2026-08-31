@@ -320,8 +320,9 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.send_json({"type": "init", "alerts": list(state.active_alerts.values())})
     try:
         while True:
-            await ws.receive_text()   # keep connection alive
-    except WebSocketDisconnect:
+            await asyncio.sleep(25)
+            await ws.send_json({"type": "ping"})
+    except Exception:
         state.ws_clients.discard(ws)
 
 

@@ -21,10 +21,12 @@ function getWsUrl(): string {
 
 type Handler = (msg: WSMessage) => void;
 
-export function useWebSocket(onMessage: Handler) {
+export function useWebSocket(onMessage: Handler, onStatusChange?: (connected: boolean) => void) {
   const wsRef = useRef<WebSocket | null>(null);
   const handlerRef = useRef<Handler>(onMessage);
   handlerRef.current = onMessage;
+  const statusRef = useRef<((connected: boolean) => void) | undefined>(onStatusChange);
+  statusRef.current = onStatusChange;
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -40,24 +42,32 @@ export function useWebSocket(onMessage: Handler) {
         const ws = new WebSocket(getWsUrl());
         wsRef.current = ws;
 
+        ws.onopen = () => {
+          statusRef.current?.(true);
+        };
+
         ws.onmessage = (e) => {
           try {
             const msg: WSMessage = JSON.parse(e.data);
+            if (msg.type === ("ping" as any)) return; // Ignore heartbeat pings
+            statusRef.current?.(true);
             handlerRef.current(msg);
           } catch { /* ignore malformed */ }
         };
 
         ws.onclose = () => {
           wsRef.current = null;
+          statusRef.current?.(false);
           if (!isDisposed) {
             timer = setTimeout(connect, 3000);
           }
         };
 
         ws.onerror = () => {
-          // Let onclose handle clean reconnection
+          statusRef.current?.(false);
         };
       } catch {
+        statusRef.current?.(false);
         if (!isDisposed) {
           timer = setTimeout(connect, 3000);
         }

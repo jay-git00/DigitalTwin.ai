@@ -74,7 +74,7 @@ export default function LiveFloorPage() {
     }
   }, [updateHistory]);
 
-  useWebSocket(handleWS);
+  useWebSocket(handleWS, setWsConnected);
 
   const activeAlerts = alerts.filter((a) => a.status === "active");
   const anomalyCount = Object.values(stations).filter((s) => (s.anomaly_score ?? 0) < -0.05).length;
