@@ -9,6 +9,8 @@ import HealthGauge from "@/components/HealthGauge";
 import ROITicker from "@/components/ROITicker";
 import BeforeAfterToggle from "@/components/BeforeAfterToggle";
 import FactoryFloorMap from "@/components/FactoryFloorMap";
+import TwinGPT from "@/components/TwinGPT";
+import ESGWidget from "@/components/ESGWidget";
 import { StationStatus, WSMessage as WS } from "@/types";
 import { Activity, Bell, Zap } from "lucide-react";
 
@@ -143,6 +145,8 @@ export default function LiveFloorPage() {
           <FactoryFloorMap stations={stations} cycleHistories={cycleHistories} />
         </div>
         <div className="w-80 shrink-0 flex flex-col gap-4">
+          {/* ESG Live Monitor */}
+          <ESGWidget stations={stations} />
           <div className="flex items-center gap-2">
             <Bell size={14} color="var(--danger)" />
             <h2 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Active Alerts</h2>
@@ -161,6 +165,8 @@ export default function LiveFloorPage() {
           />
         </div>
       </div>
+      {/* TwinGPT floating AI assistant */}
+      <TwinGPT stations={stations} vehicles={vehicles} anomalyCount={anomalyCount} alertCount={activeAlerts.length} />
 
       <DemoControls />
     </div>
