@@ -3,7 +3,7 @@
 > Live digital twin and predictive analytics platform for a 45-station vehicle assembly line.  
 > Built for the **Accenture Innovation Challenge 2026** — Problem Statement: DigitalTwin.ai
 
-[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-frontend--lemon--five--30.vercel.app-00d4ff?style=for-the-badge)](https://frontend-lemon-five-30.vercel.app)
+[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-digitaltwin--ai-00d4ff?style=for-the-badge)](https://frontend-r5vs3wevi-jayanths-projects-c674d092.vercel.app)
 [![Next.js](https://img.shields.io/badge/Next.js-16.3-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
@@ -12,7 +12,8 @@
 
 ## 🌐 Live Demo
 
-**[https://frontend-lemon-five-30.vercel.app](https://frontend-lemon-five-30.vercel.app)**
+**[https://frontend-r5vs3wevi-jayanths-projects-c674d092.vercel.app](https://frontend-r5vs3wevi-jayanths-projects-c674d092.vercel.app)**
+*(Or locally: **[http://localhost:3000](http://localhost:3000)**)*
 
 > The frontend is deployed on Vercel. The WebSocket simulation engine runs on a persistent backend. For the full live telemetry experience, run the backend locally (see [Local Setup](#local-setup--execution)) and update the API base URL.
 
